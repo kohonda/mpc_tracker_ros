@@ -31,8 +31,8 @@ curvature = Symbol('curvature')
 f_ego = ego_state.define_f()
 
 # Define state function
-f_ego['x_f'] = ego_input.twist_yaw * cos(ego_state.yaw_f)/(1 - curvature * ego_state.y_f)
-f_ego['y_f'] = ego_input.twist_yaw * sin(ego_state.yaw_f)
+f_ego['x_f'] = ego_input.twist_x * cos(ego_state.yaw_f)/(1 - curvature * ego_state.y_f)
+f_ego['y_f'] = ego_input.twist_x * sin(ego_state.yaw_f)
 f_ego['yaw_f'] = ego_input.twist_yaw - (curvature*ego_input.twist_x*cos(ego_state.yaw_f))/(1-curvature*ego_state.y_f)
 
 assert is_None_dict(f_ego), '[Error] Definition of ego state function'

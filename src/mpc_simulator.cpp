@@ -111,8 +111,8 @@ namespace pathtrack_tools
     {
         std::array<double, MPC_STATE_SPACE::DIM> dx;
         const double curvature = 0.0;
-        dx[MPC_STATE_SPACE::X_F] = u[MPC_INPUT::ANGULAR_VEL_YAW] * cos(x[MPC_STATE_SPACE::YAW_F]) / (-curvature * x[MPC_STATE_SPACE::Y_F] + 1);
-        dx[MPC_STATE_SPACE::Y_F] = u[MPC_INPUT::ANGULAR_VEL_YAW] * sin(x[MPC_STATE_SPACE::YAW_F]);
+        dx[MPC_STATE_SPACE::X_F] = u[MPC_INPUT::TWIST_X] * cos(x[MPC_STATE_SPACE::YAW_F]) / (-curvature * x[MPC_STATE_SPACE::Y_F] + 1);
+        dx[MPC_STATE_SPACE::Y_F] = u[MPC_INPUT::TWIST_X] * sin(x[MPC_STATE_SPACE::YAW_F]);
         dx[MPC_STATE_SPACE::YAW_F] = -curvature * u[MPC_INPUT::TWIST_X] * cos(x[MPC_STATE_SPACE::YAW_F]) / (-curvature * x[MPC_STATE_SPACE::Y_F] + 1) + u[MPC_INPUT::ANGULAR_VEL_YAW];
         return dx;
     }
