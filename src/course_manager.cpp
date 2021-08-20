@@ -2,7 +2,7 @@
 
 namespace pathtrack_tools
 {
-    CourseManager::CourseManager(/* args */) : curvature_smoothing_num_{10}, max_curvature_change_rate_{0.1}, hash_resolution_{0.01}, redudant_xf_{5.0}
+    CourseManager::CourseManager(/* args */) : curvature_smoothing_num_{10}, max_curvature_change_rate_{0.1}, hash_resolution_{0.01}, redundant_xf_{5.0}
     {
         nearest_index_ = 0;
         nearest_ratio_ = 1.0;
@@ -21,13 +21,13 @@ namespace pathtrack_tools
         return mpc_course_.size();
     }
 
-    MPCCourse CourseManager::get_mpc_cource() const
+    MPCCourse CourseManager::get_mpc_course() const
     {
         return mpc_course_;
     }
 
     // Read the course information from the csv and set them to a member variable.
-    void CourseManager::set_cource_from_csv(const std::string &csv_path)
+    void CourseManager::set_course_from_csv(const std::string &csv_path)
     {
         // csv read
         const rapidcsv::Document csv(csv_path);
@@ -55,7 +55,7 @@ namespace pathtrack_tools
             std::cerr << e.what() << '\n';
         }
 
-        // set value to rerference_cource_ with index
+        // set value to reference_course_ with index
         mpc_course_.resize(reference_x.size());
         mpc_course_.x = reference_x;
         mpc_course_.y = reference_y;
@@ -79,12 +79,44 @@ namespace pathtrack_tools
         set_hash_xf2index(mpc_course_, &hash_xf2index_);
     }
 
+    void CourseManager::set_course_from_nav_msgs(const nav_msgs::Path &path, const double &reference_speed)
+    {
+        mpc_course_.clear();
+
+        /*convert nav_msgs::path to mpc_course*/
+        for (const auto &pose : path.poses)
+        {
+            mpc_course_.x.push_back(pose.pose.position.x);
+            mpc_course_.y.push_back(pose.pose.position.y);
+            mpc_course_.z.push_back(pose.pose.position.z);
+            mpc_course_.yaw.push_back(tf2::getYaw(pose.pose.orientation));
+            mpc_course_.speed.push_back(reference_speed);
+        }
+
+        // set accumulated path length, which is nearly equal to x_f
+        // offset = 0.0, which must be set previous xf when mpc_course is given sequentially.
+        // TODO: ここをどうするか．
+        set_accumulated_path_length(0.0, &mpc_course_);
+
+        // set curvature, which is nearly equal to x_f
+        set_path_curvature(curvature_smoothing_num_, &mpc_course_);
+
+        // set path yaw_g for using global2frenet
+        set_path_yaw(&mpc_course_);
+
+        // Smooth the reference path when its curvature change rate is large.
+        filtering_path_curvature(mpc_course_.accumulated_path_length, &mpc_course_.curvature);
+
+        // set lookup table covert from xf to nearest index
+        set_hash_xf2index(mpc_course_, &hash_xf2index_);
+    }
+
     // offset = Updated first reference x_f
     void CourseManager::set_accumulated_path_length(const double &offset, MPCCourse *mpc_course)
     {
         if (mpc_course->size() == 0)
         {
-            std::cerr << "[Warning] Reference Cource size is zero!" << std::endl;
+            std::cerr << "[Warning] Reference Course size is zero!" << std::endl;
         }
 
         mpc_course->accumulated_path_length = calc_accumulated_path_length(offset, *mpc_course);
@@ -115,7 +147,7 @@ namespace pathtrack_tools
     {
         if (mpc_course->size() == 0)
         {
-            std::cerr << "[Warning] Reference Cource size is zero!" << std::endl;
+            std::cerr << "[Warning] Reference Course size is zero!" << std::endl;
         }
         mpc_course->curvature = calc_path_curvature(smoothing_num, *mpc_course);
     }
@@ -178,7 +210,7 @@ namespace pathtrack_tools
     // Saturate the rate of curvature change when curvature_change_rate > max_curvature_change_rate
     void CourseManager::filtering_path_curvature(const std::vector<double> &accumulated_path_length, std::vector<double> *path_curvature)
     {
-        bool is_filterd = false;
+        bool is_filtered = false;
 
         // return (+1 or -1 or 0) according to the sign of x value
         auto sign = [](const double &x) { return (x > 0) - (x < 0); };
@@ -193,19 +225,19 @@ namespace pathtrack_tools
             {
                 path_curvature->at(i) = path_curvature->at(i - 1) + sign(delta_curvature) * max_curvature_change_rate_ * delta_xf;
 
-                is_filterd = true;
+                is_filtered = true;
             }
         }
-        if (is_filterd)
+        if (is_filtered)
         {
-            std::cout << "Filterd mpc_course curvature because path curvature change rate is too big." << std::endl;
+            std::cout << "Filtered mpc_course curvature because path curvature change rate is too big." << std::endl;
         }
     }
 
     void CourseManager::set_hash_xf2index(const MPCCourse &mpc_course, std::unordered_map<double, int> *hash_xf2index)
     {
         hash_xf2index->clear();
-        const double start_xf = round_resolution(mpc_course.accumulated_path_length.front() - redudant_xf_);
+        const double start_xf = round_resolution(mpc_course.accumulated_path_length.front() - redundant_xf_);
         const double end_xf = round_resolution(mpc_course.accumulated_path_length.back());
 
         int last_nearest_index = 0;
@@ -220,7 +252,7 @@ namespace pathtrack_tools
 
     double CourseManager::round_resolution(const double &raw_x_f) const
     {
-        // returen the x_f value rounded by the resolution
+        // return the x_f value rounded by the resolution
         const double round_x_f = hash_resolution_ * std::round(raw_x_f / hash_resolution_);
         return round_x_f;
     }
@@ -238,9 +270,9 @@ namespace pathtrack_tools
             set_internal_ratio(mpc_course_, pose_x_f, nearest_index_);
         }
 
-        const double curvature_interporated = linear_interporate(mpc_course_.curvature, nearest_index_, nearest_ratio_, second_nearest_index_, second_nearest_ratio_);
+        const double curvature_interpolated = linear_interpolate(mpc_course_.curvature, nearest_index_, nearest_ratio_, second_nearest_index_, second_nearest_ratio_);
 
-        return curvature_interporated;
+        return curvature_interpolated;
     }
 
     double CourseManager::get_speed(const double &pose_x_f)
@@ -256,8 +288,8 @@ namespace pathtrack_tools
             set_internal_ratio(mpc_course_, pose_x_f, nearest_index_);
         }
 
-        const double reference_speed_interporated = linear_interporate(mpc_course_.speed, nearest_index_, nearest_ratio_, second_nearest_index_, second_nearest_ratio_);
-        return reference_speed_interporated;
+        const double reference_speed_interpolated = linear_interpolate(mpc_course_.speed, nearest_index_, nearest_ratio_, second_nearest_index_, second_nearest_ratio_);
+        return reference_speed_interpolated;
     }
 
     double CourseManager::get_drivable_width(const double &pose_x_f)
@@ -273,8 +305,8 @@ namespace pathtrack_tools
             set_internal_ratio(mpc_course_, pose_x_f, nearest_index_);
         }
 
-        const double drivable_width_interporated = linear_interporate(mpc_course_.drivable_width, nearest_index_, nearest_ratio_, second_nearest_index_, second_nearest_ratio_);
-        return drivable_width_interporated;
+        const double drivable_width_interpolated = linear_interpolate(mpc_course_.drivable_width, nearest_index_, nearest_ratio_, second_nearest_index_, second_nearest_ratio_);
+        return drivable_width_interpolated;
     }
 
     int CourseManager::search_nearest_index(const MPCCourse &mpc_course, const double &pose_x_f, const int &last_nearest_index) const noexcept
@@ -379,7 +411,7 @@ namespace pathtrack_tools
         }
         else if (diff_nearest == 0)
         {
-            // veihcle is on the nearest point
+            // vehicle is on the nearest point
             second_nearest_index_ = nearest_index_;
         }
 
@@ -400,7 +432,7 @@ namespace pathtrack_tools
         }
     }
 
-    double CourseManager::linear_interporate(const std::vector<double> &reference_vec, const int &nearest_index, const double &nearest_ratio, const int &second_nearest_index,
+    double CourseManager::linear_interpolate(const std::vector<double> &reference_vec, const int &nearest_index, const double &nearest_ratio, const int &second_nearest_index,
                                              const double &second_nearest_ratio) const noexcept
     {
         return second_nearest_ratio * reference_vec[nearest_index] + nearest_ratio * reference_vec[second_nearest_index];

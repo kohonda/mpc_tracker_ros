@@ -21,7 +21,7 @@ MPCTracker::MPCTracker() : nh_(""), private_nh_("~"), tf_listener_(tf_buffer_)
     /*Initialize C/GMRES Solver */
     nmpc_solver_ptr_ =
         std::make_unique<cgmres::ContinuationGMRES>(cgmres_param_.Tf_, cgmres_param_.alpha_, cgmres_param_.N_, cgmres_param_.finite_distance_increment_, cgmres_param_.zeta_, cgmres_param_.kmax_);
-    const double solution_initial_guess[MPC_INPUT::DIM] = { 0.01, 0.01 };
+    const double solution_initial_guess[MPC_INPUT::DIM] = {0.01, 0.01};
     nmpc_solver_ptr_->setParametersForInitialization(solution_initial_guess, 1e-06, 50);
     // TODO : set mpc params
 
@@ -39,14 +39,53 @@ MPCTracker::MPCTracker() : nh_(""), private_nh_("~"), tf_listener_(tf_buffer_)
     private_nh_.param("robot_frame_id", robot_frame_id_, static_cast<std::string>("base_link"));
     private_nh_.param("map_frame_id", map_frame_id_, static_cast<std::string>("map"));
     pub_twist_cmd_ = nh_.advertise<geometry_msgs::Twist>(out_twist_topic, 1);
-    sub_ref_path_  = nh_.subscribe(in_refpath_topic, 1, &MPCTracker::callback_reference_path, this);
-    sub_odom_      = nh_.subscribe(in_odom_topic, 1, &MPCTracker::callback_odom, this);
+    sub_ref_path_ = nh_.subscribe(in_refpath_topic, 1, &MPCTracker::callback_reference_path, this);
+    sub_odom_ = nh_.subscribe(in_odom_topic, 1, &MPCTracker::callback_odom, this);
 };
 
 MPCTracker::~MPCTracker(){};
 
-void MPCTracker::timer_callback(const ros::TimerEvent& te){};
+void MPCTracker::timer_callback(const ros::TimerEvent &te){};
 
-void MPCTracker::callback_odom(const nav_msgs::Odometry& odom){};
+// Update robot pose when subscribe odometry msg
+void MPCTracker::callback_odom(const nav_msgs::Odometry &odom)
+{
+    /*Get current pose via tf*/
+    geometry_msgs::TransformStamped trans_form_stamped;
+    try
+    {
+        trans_form_stamped = tf_buffer_.lookupTransform(map_frame_id_, robot_frame_id_, ros::Time(0));
+    }
+    catch (const tf2::TransformException &ex)
+    {
+        ROS_WARN("%s", ex.what());
+        return;
+    }
 
-void MPCTracker::callback_reference_path(const nav_msgs::Path& path){};
+    /*update robot pose global*/
+    robot_status_.robot_pose_global_.x = trans_form_stamped.transform.translation.x;
+    robot_status_.robot_pose_global_.y = trans_form_stamped.transform.translation.y;
+    robot_status_.robot_pose_global_.z = trans_form_stamped.transform.translation.z; // not used now
+    double roll, pitch, yaw;
+    tf2::getEulerYPR(trans_form_stamped.transform.rotation, roll, pitch, yaw);
+    robot_status_.robot_pose_global_.roll = roll;   // not used now
+    robot_status_.robot_pose_global_.pitch = pitch; // not used now
+    robot_status_.robot_pose_global_.yaw = yaw;
+};
+
+// update reference_course in MPC and calculate curvature
+void MPCTracker::callback_reference_path(const nav_msgs::Path &path)
+{
+    if (path.poses.size() == 0)
+    {
+        ROS_WARN("Received reference path is empty");
+        return;
+    }
+
+    /*Set reference course, calculate path curvature and filtering path used in MPC*/
+    // TODO::NOTE: NOW SET REFERENCE SPEED IS CONSTANT
+    // TODO : リサンプリングがひつようかも
+    course_manager_.set_course_from_nav_msgs(path, reference_speed_);
+
+    ROS_INFO("[MPC] Path callback: receive path size = %lu", course_manager_.get_mpc_course().size());
+};
