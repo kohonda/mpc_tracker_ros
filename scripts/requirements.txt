@@ -1,0 +1,6 @@
+sympy==1.7.1
+numpy==1.19.5
+fire==0.4.0
+pandas==1.1.5
+matplotlib==3.3.4
+PyYAML==5.4.1

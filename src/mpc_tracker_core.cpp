@@ -16,6 +16,7 @@ MPCTracker::MPCTracker() : nh_(""), private_nh_("~"), tf_listener_(tf_buffer_)
 
     /*mpc parameters*/
     // TODO: set mpc parameters
+    private_nh_.param("reference_speed", reference_speed_, static_cast<double>(1.0));
     // max, min
 
     /*Initialize C/GMRES Solver */
@@ -33,8 +34,8 @@ MPCTracker::MPCTracker() : nh_(""), private_nh_("~"), tf_listener_(tf_buffer_)
     std::string out_twist_topic;
     std::string in_refpath_topic;
     std::string in_odom_topic;
-    private_nh_.param("out_twist_topic", out_twist_topic, static_cast<std::string>("autoware_twist"));
-    private_nh_.param("in_refpath_topic", in_refpath_topic, static_cast<std::string>("res_gp_path"));
+    private_nh_.param("out_twist_topic", out_twist_topic, static_cast<std::string>("twist_cmd"));
+    private_nh_.param("in_refpath_topic", in_refpath_topic, static_cast<std::string>("reference_path"));
     private_nh_.param("in_odom_topic", in_odom_topic, static_cast<std::string>("odom"));
     private_nh_.param("robot_frame_id", robot_frame_id_, static_cast<std::string>("base_link"));
     private_nh_.param("map_frame_id", map_frame_id_, static_cast<std::string>("map"));
@@ -45,7 +46,9 @@ MPCTracker::MPCTracker() : nh_(""), private_nh_("~"), tf_listener_(tf_buffer_)
 
 MPCTracker::~MPCTracker(){};
 
-void MPCTracker::timer_callback(const ros::TimerEvent &te){};
+void MPCTracker::timer_callback(const ros::TimerEvent &te){
+
+};
 
 // Update robot pose when subscribe odometry msg
 void MPCTracker::callback_odom(const nav_msgs::Odometry &odom)
@@ -71,6 +74,14 @@ void MPCTracker::callback_odom(const nav_msgs::Odometry &odom)
     robot_status_.robot_pose_global_.roll = roll;   // not used now
     robot_status_.robot_pose_global_.pitch = pitch; // not used now
     robot_status_.robot_pose_global_.yaw = yaw;
+
+    /*update robot twist*/
+    robot_status_.robot_twist_.x = odom.twist.twist.linear.x;
+    robot_status_.robot_twist_.y = odom.twist.twist.linear.y;
+    robot_status_.robot_twist_.z = odom.twist.twist.linear.z;     // not used now
+    robot_status_.robot_twist_.roll = odom.twist.twist.angular.x; // not used now
+    robot_status_.robot_twist_.pitch = odom.twist.twist.linear.y; // note used now
+    robot_status_.robot_twist_.yaw = odom.twist.twist.angular.z;
 };
 
 // update reference_course in MPC and calculate curvature
