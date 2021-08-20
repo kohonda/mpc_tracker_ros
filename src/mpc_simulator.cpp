@@ -11,72 +11,40 @@ namespace pathtrack_tools
     {
     }
 
-    std::pair<Pose, Twist> MPCSimulator::update_ego_state(const double current_time, const Pose &current_ego_pose_global, const Twist &current_ego_twist, const double *control_input_vec,
-                                                          const double sampling_time)
+    Pose MPCSimulator::update_ego_state(const double current_time, const Pose &current_ego_pose_global, const double *control_input_vec, const double sampling_time)
     {
-        const std::array<double, EGO_STATE_FOR_SIM::DIM> current_ego_vehicle_state = ego_struct_to_state(current_ego_pose_global, current_ego_twist);
+        const std::array<double, MPC_STATE_SPACE::DIM> current_ego_vehicle_state = ego_pose_to_state(current_ego_pose_global);
 
-        // TODO: uをarrayにしたいね...変えると面倒かもだけど std::function<std::array<double, 4>(const double, const std::array<double, 4>&, const double*)>
+        auto state_func = [this](auto current_time, auto x, auto u) { return this->two_dw_with_delay(current_time, x, u); };
 
-        auto state_func = [this](auto current_time, auto x, auto u) {
-            const double speed_threshold_dynamics = 1.0; // [m/s] because dbm is less accurate at low vehicle speeds and cannot be used when vehicle speed is negative
-            if (x[EGO_STATE_FOR_SIM::TWIST_X] < speed_threshold_dynamics)
-            {
-                return this->fx_kbm_with_delay(current_time, x, u);
-            }
-            else
-            {
-                return this->fx_dbm_with_delay(current_time, x, u);
-            }
-        };
+        std::array<double, MPC_INPUT::DIM> control_input = {control_input_vec[MPC_INPUT::ANGULAR_VEL_YAW], control_input_vec[MPC_INPUT::TWIST_X]};
 
-        const std::array<double, EGO_STATE_FOR_SIM::DIM> updated_ego_vehicle_state = runge_kutta_gill(current_time, current_ego_vehicle_state, control_input_vec, sampling_time, state_func);
+        const std::array<double, MPC_STATE_SPACE::DIM> updated_robot_state = runge_kutta_gill(current_time, current_ego_vehicle_state, control_input, sampling_time, state_func);
 
-        const auto [updated_ego_pose, updated_ego_twist] = ego_state_to_struct(updated_ego_vehicle_state);
+        const auto updated_robot_pose = ego_state_to_pose(updated_robot_state);
 
-        return {updated_ego_pose, updated_ego_twist};
+        return updated_robot_pose;
     }
 
-    std::pair<FrenetCoordinate, Twist> MPCSimulator::update_pedestrian_state(const FrenetCoordinate &current_pose, const Twist &current_twist, const double sampling_time) const
+    std::array<std::vector<double>, MPC_STATE_SPACE::DIM> MPCSimulator::reproduct_predivted_state(const Pose &current_ego_pose_global, const std::array<std::vector<double>, MPC_INPUT::DIM> &control_input_series, const double &sampling_time) const
     {
-        FrenetCoordinate updated_pose;
-        Twist updated_twist;
+        std::array<double, MPC_STATE_SPACE::DIM> current_state = ego_pose_to_state(current_ego_pose_global);
 
-        // constant velocity walking
-        updated_twist = current_twist;
+        std::array<std::vector<double>, MPC_STATE_SPACE::DIM> predicted_state_series; // for return value
 
-        // update pose
-        updated_pose.x_f = current_pose.x_f + updated_twist.x * sampling_time;
-        updated_pose.y_f = current_pose.y_f + updated_twist.y * sampling_time;
-
-        return {updated_pose, updated_twist};
-    }
-
-    std::array<std::vector<double>, EGO_STATE_FOR_SIM::DIM> MPCSimulator::reproduct_predivted_state(const Pose &current_ego_pose_global, const Twist &current_ego_twist,
-                                                                                                    const std::array<std::vector<double>, EGO_INPUT::DIM> &control_input_series,
-                                                                                                    const double &sampling_time) const
-    {
-        std::array<double, EGO_STATE_FOR_SIM::DIM> current_state = ego_struct_to_state(current_ego_pose_global, current_ego_twist);
-
-        std::array<std::vector<double>, EGO_STATE_FOR_SIM::DIM> predicted_state_series; // for return value
-
-        auto state_func = [this](auto current_time, auto x, auto u) { return this->fx_dbml_without_delay(current_time, x, u); };
+        auto state_func = [this](auto current_time, auto x, auto u) { return this->two_dw_without_delay(current_time, x, u); };
 
         for (size_t i = 0; i < control_input_series.at(0).size(); i++)
         {
-            // const std::array<double, EGO_INPUT::DIM> input = { control_input_series[EGO_INPUT::STEER_ANGLE][i], control_input_series[EGO_INPUT::ACCEL][i] };
-            const double input[EGO_INPUT::DIM] = {control_input_series[EGO_INPUT::STEER_ANGLE][i], control_input_series[EGO_INPUT::ACCEL][i]};
+            const std::array<double, MPC_INPUT::DIM> input = {control_input_series[MPC_INPUT::ANGULAR_VEL_YAW][i], control_input_series[MPC_INPUT::TWIST_X][i]};
 
             const double current_time = 0.0;
 
             const auto updated_state = eular(current_time, current_state, input, sampling_time, state_func);
 
-            predicted_state_series[EGO_STATE_FOR_SIM::X_G].push_back(updated_state[EGO_STATE_FOR_SIM::X_G]);
-            predicted_state_series[EGO_STATE_FOR_SIM::Y_G].push_back(updated_state[EGO_STATE_FOR_SIM::Y_G]);
-            predicted_state_series[EGO_STATE_FOR_SIM::YAW_G].push_back(updated_state[EGO_STATE_FOR_SIM::YAW_G]);
-            predicted_state_series[EGO_STATE_FOR_SIM::TWIST_X].push_back(updated_state[EGO_STATE_FOR_SIM::TWIST_X]);
-            predicted_state_series[EGO_STATE_FOR_SIM::TWIST_Y].push_back(updated_state[EGO_STATE_FOR_SIM::TWIST_Y]);
-            predicted_state_series[EGO_STATE_FOR_SIM::TWIST_YAW].push_back(updated_state[EGO_STATE_FOR_SIM::TWIST_YAW]);
+            predicted_state_series[MPC_STATE_SPACE::X_F].push_back(updated_state[MPC_STATE_SPACE::X_F]);
+            predicted_state_series[MPC_STATE_SPACE::Y_F].push_back(updated_state[MPC_STATE_SPACE::Y_F]);
+            predicted_state_series[MPC_STATE_SPACE::YAW_F].push_back(updated_state[MPC_STATE_SPACE::YAW_F]);
 
             current_state = updated_state;
         }
@@ -84,33 +52,26 @@ namespace pathtrack_tools
         return predicted_state_series;
     }
 
-    std::array<double, EGO_STATE_FOR_SIM::DIM> MPCSimulator::ego_struct_to_state(const Pose &ego_pose, const Twist &ego_twist) const
+    std::array<double, MPC_STATE_SPACE::DIM> MPCSimulator::ego_pose_to_state(const Pose &ego_pose) const
     {
-        std::array<double, EGO_STATE_FOR_SIM::DIM> ego_state;
+        std::array<double, MPC_STATE_SPACE::DIM> ego_state;
 
-        ego_state.at(EGO_STATE_FOR_SIM::X_G) = ego_pose.x;
-        ego_state.at(EGO_STATE_FOR_SIM::Y_G) = ego_pose.y;
-        ego_state.at(EGO_STATE_FOR_SIM::YAW_G) = ego_pose.yaw;
-        ego_state.at(EGO_STATE_FOR_SIM::TWIST_X) = ego_twist.x;
-        ego_state.at(EGO_STATE_FOR_SIM::TWIST_Y) = ego_twist.y;
-        ego_state.at(EGO_STATE_FOR_SIM::TWIST_YAW) = ego_twist.yaw;
+        ego_state.at(MPC_STATE_SPACE::X_F) = ego_pose.x;
+        ego_state.at(MPC_STATE_SPACE::Y_F) = ego_pose.y;
+        ego_state.at(MPC_STATE_SPACE::YAW_F) = ego_pose.yaw;
 
         return ego_state;
     }
 
-    std::pair<Pose, Twist> MPCSimulator::ego_state_to_struct(const std::array<double, EGO_STATE_FOR_SIM::DIM> &ego_state) const
+    Pose MPCSimulator::ego_state_to_pose(const std::array<double, MPC_STATE_SPACE::DIM> &ego_state) const
     {
         Pose ego_pose;
-        Twist ego_twist;
 
-        ego_pose.x = ego_state.at(EGO_STATE_FOR_SIM::X_G);
-        ego_pose.y = ego_state.at(EGO_STATE_FOR_SIM::Y_G);
-        ego_pose.yaw = ego_state.at(EGO_STATE_FOR_SIM::YAW_G);
-        ego_twist.x = ego_state.at(EGO_STATE_FOR_SIM::TWIST_X);
-        ego_twist.y = ego_state.at(EGO_STATE_FOR_SIM::TWIST_Y);
-        ego_twist.yaw = ego_state.at(EGO_STATE_FOR_SIM::TWIST_YAW);
+        ego_pose.x = ego_state.at(MPC_STATE_SPACE::X_F);
+        ego_pose.y = ego_state.at(MPC_STATE_SPACE::Y_F);
+        ego_pose.yaw = ego_state.at(MPC_STATE_SPACE::YAW_F);
 
-        return {ego_pose, ego_twist};
+        return ego_pose;
     }
 
     void MPCSimulator::initialize_input_queue(const double &sampling_time)
@@ -146,99 +107,27 @@ namespace pathtrack_tools
         return delayed_angle_input;
     }
 
-    std::array<double, EGO_STATE_FOR_SIM::DIM> MPCSimulator::fx_kbm_without_delay(const double current_time, const std::array<double, EGO_STATE_FOR_SIM::DIM> &x, const double *u) const
+    std::array<double, MPC_STATE_SPACE::DIM> MPCSimulator::two_dw_without_delay(const double &current_time, const std::array<double, MPC_STATE_SPACE::DIM> &x, const std::array<double, MPC_INPUT::DIM> &u) const
     {
-        std::array<double, EGO_STATE_FOR_SIM::DIM> dx;
-
+        std::array<double, MPC_STATE_SPACE::DIM> dx;
         const double curvature = 0.0;
-
-        double x0 = vehicle_lf_ + vehicle_lr_;
-        double x1 = std::tan(u[EGO_INPUT::STEER_ANGLE]);
-        double x2 = x1 / x0;
-        double x3 = x[EGO_STATE_FOR_SIM::YAW_G] + std::atan2(vehicle_lr_ * x2, 1.0);
-        double x4 = x[EGO_STATE_FOR_SIM::TWIST_X] * std::cos(x3) / (-curvature * x[EGO_STATE_FOR_SIM::Y_G] + 1);
-
-        dx[EGO_STATE_FOR_SIM::Y_G] = x[EGO_STATE_FOR_SIM::TWIST_X] * std::sin(x3);
-        dx[EGO_STATE_FOR_SIM::YAW_G] = -curvature * x4 + x2 * x[EGO_STATE_FOR_SIM::TWIST_X] / std::sqrt(pow(vehicle_lr_, 2) * pow(x1, 2) / pow(x0, 2) + 1);
-        dx[EGO_STATE_FOR_SIM::X_G] = x4;
-        dx[EGO_STATE_FOR_SIM::TWIST_X] = u[EGO_INPUT::ACCEL];
-        dx[EGO_STATE_FOR_SIM::TWIST_Y] = 0.0;
-        dx[EGO_STATE_FOR_SIM::TWIST_YAW] = 0.0;
-
+        dx[MPC_STATE_SPACE::X_F] = u[MPC_INPUT::ANGULAR_VEL_YAW] * cos(x[MPC_STATE_SPACE::YAW_F]) / (-curvature * x[MPC_STATE_SPACE::Y_F] + 1);
+        dx[MPC_STATE_SPACE::Y_F] = u[MPC_INPUT::ANGULAR_VEL_YAW] * sin(x[MPC_STATE_SPACE::YAW_F]);
+        dx[MPC_STATE_SPACE::YAW_F] = -curvature * u[MPC_INPUT::TWIST_X] * cos(x[MPC_STATE_SPACE::YAW_F]) / (-curvature * x[MPC_STATE_SPACE::Y_F] + 1) + u[MPC_INPUT::ANGULAR_VEL_YAW];
         return dx;
     }
 
-    std::array<double, EGO_STATE_FOR_SIM::DIM> MPCSimulator::fx_kbm_with_delay(const double current_time, const std::array<double, EGO_STATE_FOR_SIM::DIM> &x, const double *u)
+    std::array<double, MPC_STATE_SPACE::DIM> MPCSimulator::two_dw_with_delay(const double &current_time, const std::array<double, MPC_STATE_SPACE::DIM> &x, const std::array<double, MPC_INPUT::DIM> &u)
     {
-        const double raw_angle_input = u[EGO_INPUT::STEER_ANGLE];
-        const double raw_accel_input = u[EGO_INPUT::ACCEL];
+        const double raw_angle_input = u[MPC_INPUT::ANGULAR_VEL_YAW];
+        const double raw_accel_input = u[MPC_INPUT::TWIST_X];
 
         const double delayed_angle_input = delay_angle_input(raw_angle_input);
         const double delayed_accel_input = delay_accel_input(raw_accel_input);
 
-        const double delayed_u[EGO_INPUT::DIM] = {delayed_angle_input, delayed_accel_input};
+        const std::array<double, MPC_INPUT::DIM> delayed_u = {delayed_angle_input, delayed_accel_input};
 
-        const std::array<double, EGO_STATE_FOR_SIM::DIM> dx = fx_kbm_without_delay(current_time, x, delayed_u);
-
-        return dx;
-    }
-
-    std::array<double, EGO_STATE_FOR_SIM::DIM> MPCSimulator::fx_dbm_without_delay(const double current_time, const std::array<double, EGO_STATE_FOR_SIM::DIM> &x, const double *u) const
-    {
-        const double d_x_g = x[EGO_STATE_FOR_SIM::TWIST_X] * std::cos(x[EGO_STATE_FOR_SIM::YAW_G]) - x[EGO_STATE_FOR_SIM::TWIST_Y] * std::sin(x[EGO_STATE_FOR_SIM::YAW_G]);
-        const double d_y_g = x[EGO_STATE_FOR_SIM::TWIST_X] * std::sin(x[EGO_STATE_FOR_SIM::YAW_G]) + x[EGO_STATE_FOR_SIM::TWIST_Y] * std::cos(x[EGO_STATE_FOR_SIM::YAW_G]);
-        const double d_yaw_g = x[EGO_STATE_FOR_SIM::TWIST_YAW];
-
-        const double F_fy = -2 * vehicle_kf_ *
-                            std::atan2(((x[EGO_STATE_FOR_SIM::TWIST_Y] + vehicle_lf_ * x[EGO_STATE_FOR_SIM::TWIST_YAW]) / std::max(x[EGO_STATE_FOR_SIM::TWIST_X], 0.01) - u[EGO_INPUT::STEER_ANGLE]), 1.0);
-        const double F_ry = -2 * vehicle_kr_ * std::atan2(((x[EGO_STATE_FOR_SIM::TWIST_Y] - vehicle_lr_ * x[EGO_STATE_FOR_SIM::TWIST_YAW]) / std::max(x[EGO_STATE_FOR_SIM::TWIST_X], 0.01)), 1.0);
-
-        const double d_twist_x = u[EGO_INPUT::ACCEL] - F_fy * std::sin(u[EGO_INPUT::STEER_ANGLE]) / vehicle_mass_ + x[EGO_STATE_FOR_SIM::TWIST_Y] * x[EGO_STATE_FOR_SIM::TWIST_YAW];
-        const double d_twist_y = F_ry / vehicle_mass_ + F_fy * std::cos(u[EGO_INPUT::STEER_ANGLE]) / vehicle_mass_ - x[EGO_STATE_FOR_SIM::TWIST_X] * x[EGO_STATE_FOR_SIM::TWIST_YAW];
-        const double d_twist_yaw = (F_fy * vehicle_lf_ * std::cos(u[EGO_INPUT::STEER_ANGLE]) - F_ry * vehicle_lr_) / vehicle_inertia_;
-
-        // return d/dt[x_g, y_g, yaw_g, twist.x, twist.y, twist.yaw]
-        std::array<double, EGO_STATE_FOR_SIM::DIM> dx = {d_x_g, d_y_g, d_yaw_g, d_twist_x, d_twist_y, d_twist_yaw};
-
-        return dx;
-    }
-
-    std::array<double, EGO_STATE_FOR_SIM::DIM> MPCSimulator::fx_dbm_with_delay(const double current_time, const std::array<double, EGO_STATE_FOR_SIM::DIM> &x, const double *u)
-    {
-        const double raw_angle_input = u[EGO_INPUT::STEER_ANGLE];
-        const double raw_accel_input = u[EGO_INPUT::ACCEL];
-
-        const double delayed_angle_input = delay_angle_input(raw_angle_input);
-        const double delayed_accel_input = delay_accel_input(raw_accel_input);
-
-        const double delayed_u[EGO_INPUT::DIM] = {delayed_angle_input, delayed_accel_input};
-
-        const std::array<double, EGO_STATE_FOR_SIM::DIM> dx = fx_dbm_without_delay(current_time, x, delayed_u);
-
-        return dx;
-    }
-
-    std::array<double, EGO_STATE_FOR_SIM::DIM> MPCSimulator::fx_dbml_without_delay(const double current_time, const std::array<double, EGO_STATE_FOR_SIM::DIM> &x, const double *u) const
-    {
-        const double d_x_g = x[EGO_STATE_FOR_SIM::TWIST_X] * std::cos(x[EGO_STATE_FOR_SIM::YAW_G]) - x[EGO_STATE_FOR_SIM::TWIST_Y] * std::sin(x[EGO_STATE_FOR_SIM::YAW_G]);
-        const double d_y_g = x[EGO_STATE_FOR_SIM::TWIST_X] * std::sin(x[EGO_STATE_FOR_SIM::YAW_G]) + x[EGO_STATE_FOR_SIM::TWIST_Y] * std::cos(x[EGO_STATE_FOR_SIM::YAW_G]);
-        const double d_yaw_g = x[EGO_STATE_FOR_SIM::TWIST_YAW];
-
-        const double F_fy =
-            -2 * vehicle_kf_ *
-            std::atan2(((x[EGO_STATE_FOR_SIM::TWIST_Y] + vehicle_lf_ * x[EGO_STATE_FOR_SIM::TWIST_YAW]) / (x[EGO_STATE_FOR_SIM::TWIST_X] + 1.0 * log(1 + exp(-2.0 * x[EGO_STATE_FOR_SIM::TWIST_X]))) -
-                        u[EGO_INPUT::STEER_ANGLE]),
-                       1.0);
-        const double F_ry =
-            -2 * vehicle_kr_ *
-            std::atan2(((x[EGO_STATE_FOR_SIM::TWIST_Y] - vehicle_lr_ * x[EGO_STATE_FOR_SIM::TWIST_YAW]) / (x[EGO_STATE_FOR_SIM::TWIST_X] + 1.0 * log(1 + exp(-2.0 * x[EGO_STATE_FOR_SIM::TWIST_X])))), 1.0);
-
-        const double d_twist_x = u[EGO_INPUT::ACCEL] - F_fy * std::sin(u[EGO_INPUT::STEER_ANGLE]) / vehicle_mass_ + x[EGO_STATE_FOR_SIM::TWIST_Y] * x[EGO_STATE_FOR_SIM::TWIST_YAW];
-        const double d_twist_y = F_ry / vehicle_mass_ + F_fy * std::cos(u[EGO_INPUT::STEER_ANGLE]) / vehicle_mass_ - x[EGO_STATE_FOR_SIM::TWIST_X] * x[EGO_STATE_FOR_SIM::TWIST_YAW];
-        const double d_twist_yaw = (F_fy * vehicle_lf_ * std::cos(u[EGO_INPUT::STEER_ANGLE]) - F_ry * vehicle_lr_) / vehicle_inertia_;
-
-        // return d/dt[x_g, y_g, yaw_g, twist.x, twist.y, twist.yaw]
-        std::array<double, EGO_STATE_FOR_SIM::DIM> dx = {d_x_g, d_y_g, d_yaw_g, d_twist_x, d_twist_y, d_twist_yaw};
+        const std::array<double, MPC_STATE_SPACE::DIM> dx = two_dw_without_delay(current_time, x, delayed_u);
 
         return dx;
     }

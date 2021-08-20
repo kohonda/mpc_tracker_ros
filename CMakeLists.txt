@@ -46,7 +46,7 @@ set(
   MPC_TRACKER_SRC
   src/course_manager.cpp
   src/frenet_serret_converter.cpp
-  # src/mpc_simulator.cpp
+  src/mpc_simulator.cpp
   src/frenet_state_filter.cpp
   src/mpc_formulation.cpp
 )
@@ -79,9 +79,17 @@ target_link_libraries(mpc_tracker_node
   ${catkin_LIBRARIES}
 )
 
+
+add_executable(simulation
+  simulation/simulation.cpp
+  ${MPC_TRACKER_SRC}
+  ${CGMRES_SOLVER_SRC}
+)
+
 install(
   TARGETS
     mpc_tracker_node
+    simulation
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

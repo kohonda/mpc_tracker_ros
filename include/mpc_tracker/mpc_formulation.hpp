@@ -24,7 +24,7 @@ namespace cgmres
         std::array<double, dim_state_> q_ = {1.0, 1.0, 1.0};
         std::array<double, dim_state_> q_terminal_ = {10.0, 10.0, 10.0};
         std::array<double, dim_state_> x_ref_ = {0.0, 0.0, 0.0};
-        std::array<double, dim_control_input_> r_ = {10.0, 1.0};
+        std::array<double, dim_control_input_> r_ = {10.0, 1000.0};
 
     public:
         // Computes the state equation f(t, x, u).

@@ -31,6 +31,8 @@ cd catkin_ws/src
 
 git clone git@github.com:kohonda/mpc_tracker_ros.git
 
+cd ..
+
 rosdep update
 
 rosdep install -y --from-paths src --ignore-src --rosdistro $ROS_DISTRO
