@@ -9,8 +9,14 @@
 #include "mpc_tracker/frenet_state_filter.hpp"
 #include "mpc_tracker/matplotlibcpp.h"
 
-int main()
+int main(int argc, char *argv[])
 {
+    if (argc != 3)
+    {
+        std::cout << "The argument is invalid. " << std::endl;
+        std::cout << "Usage: ./simulation <input_reference_path.csv> <output_result.csv>" << std::endl;
+        return -1;
+    }
     // // Define the model in NMPC just to use to know the size of optimization formulation
     cgmres::NMPCModel nmpc_model;
     const double sampling_time = 0.1;
@@ -41,14 +47,16 @@ int main()
 
     // // Set Driving course
     pathtrack_tools::CourseManager course_manager;
+    const std::string input_reference_path = static_cast<std::string>(argv[1]);
     // // The course is given in advance, but it can be updated sequentially.
     // // course_manager.set_course_from_csv("../reference_path/oval_course.csv");
     // // course_manager.set_course_from_csv("../reference_path/circuit_course.csv");
     // // course_manager.set_course_from_csv("../reference_path/step_path_01m.csv");
 
-    course_manager.set_course_from_csv("/home/honda/colcon_ws/src/mpc_tracker_ros/simulation/reference_path/sinwave_cource.csv");
+    // course_manager.set_course_from_csv("/home/honda/colcon_ws/src/mpc_tracker_ros/simulation/reference_path/sinwave_cource.csv");
     // // course_manager.set_course_from_csv("../reference_path/stop_course.csv");
     // // course_manager.set_course_from_csv("../reference_path/turn_right.csv");
+    course_manager.set_course_from_csv(input_reference_path);
 
     std::function<double(double)> course_curvature = [&course_manager](const double &x_f) { return course_manager.get_curvature(x_f); };
     std::function<double(double)> course_speed = [&course_manager](const double &x_f) { return course_manager.get_speed(x_f); };
@@ -65,7 +73,8 @@ int main()
     double control_input_vec[nmpc_model.dim_control_input()];             // calculated control input (tire_angle, accel)
 
     // save result log setting
-    const std::string save_csv_file = "/home/honda/colcon_ws/src/mpc_tracker_ros/simulation/simulation_result/result.csv";
+    // const std::string save_csv_file = "/home/honda/colcon_ws/src/mpc_tracker_ros/simulation/simulation_result/result.csv";
+    const std::string save_csv_file = static_cast<std::string>(argv[2]);
     CSVWriter csv;
     // Set header of csv
     /* clang-format off */
@@ -141,6 +150,8 @@ int main()
         // for plot
         std::vector<double> ego_pose_x(1);
         std::vector<double> ego_pose_y(1);
+        std::vector<double> ego_yaw_x(2);
+        std::vector<double> ego_yaw_y(2);
         if (static_cast<int>(current_time) % 1 == 0)
         {
             // get predictive state series
@@ -151,13 +162,19 @@ int main()
 
             ego_pose_x[0] = ego_pose_global.x;
             ego_pose_y[0] = ego_pose_global.y;
+            ego_yaw_x[0] = ego_pose_global.x;
+            ego_yaw_y[0] = ego_pose_global.y;
+            const double rod_length = 1.0;
+            ego_yaw_x[1] = ego_pose_global.x + rod_length * cos(ego_pose_global.yaw);
+            ego_yaw_y[1] = ego_pose_global.y + rod_length * sin(ego_pose_global.yaw);
 
             matplotlibcpp::named_plot("Reference path", course_manager.get_mpc_course().x, course_manager.get_mpc_course().y, "g:");
             matplotlibcpp::named_plot("Ego car global position", ego_pose_x, ego_pose_y, "or");
+            matplotlibcpp::plot(ego_yaw_x, ego_yaw_y, "r");
             matplotlibcpp::named_plot("Planned path", predicted_series[MPC_STATE_SPACE::X_F], predicted_series[MPC_STATE_SPACE::Y_F], "b-");
 
-            matplotlibcpp::xlim(ego_pose_global.x - 10, ego_pose_global.x + 10);
-            matplotlibcpp::ylim(ego_pose_global.y - 10, ego_pose_global.y + 10);
+            matplotlibcpp::xlim(ego_pose_global.x - 5, ego_pose_global.x + 5);
+            matplotlibcpp::ylim(ego_pose_global.y - 5, ego_pose_global.y + 5);
 
             // Add graph title
             matplotlibcpp::title("Real Time Plotter");
