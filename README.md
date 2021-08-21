@@ -47,6 +47,14 @@ colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
 
 ## How to run offline simulation
 
+```bash
+cd catkin_ws/src
+
+./mpc_tracker_ros/scripts/offline_simulation.sh
+```
+
+Then, start simulation with real-time plot and get the simulation result at `mpc_tracker_ros/simulation/simulation_result/result.csv` after termination.
+
 ## How to launch online node
 
 ## Parameters

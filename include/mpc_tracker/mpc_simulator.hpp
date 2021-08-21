@@ -60,13 +60,6 @@ namespace pathtrack_tools
         std::array<std::vector<double>, MPC_STATE_SPACE::DIM> reproduct_predivted_state(const Pose &current_ego_pose_global, const std::array<std::vector<double>, MPC_INPUT::DIM> &control_input_series, const double &sampling_time) const;
 
     private:
-        const double vehicle_lf_ = 1.365;     // length from CG to Front axle center[m]
-        const double vehicle_lr_ = 1.485;     // length from CG to Rear axle center[m]
-        const double vehicle_mass_ = 1823;    // vehicle mass [kg]
-        const double vehicle_inertia_ = 3315; // vehicle moment of inertia [kgm^2]
-        const double vehicle_kf_ = 51670;     // cornering stiffness of a front wheel [N/rad]
-        const double vehicle_kr_ = 120500;    // cornering stiffness of a rear wheel [N/rad]
-
         std::queue<double> accel_input_queue_; // buffer for accel input to describe time delay
         std::queue<double> angle_input_queue_; // buffer for tire angle input to describe time delay
         const double accel_delay_time_ = 0.01; // time delay for accel input [s]
