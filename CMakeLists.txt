@@ -3,7 +3,9 @@ project(mpc_tracker)
 
 add_compile_options(-std=c++17)
 add_compile_options(-Wall -Wextra)
-add_compile_options(-O3 -march=native -fopenmp)
+# add_compile_options(-O3 -march=native -fopenmp)
+add_compile_options(-O3 -fopenmp)
+
 
 find_package(catkin REQUIRED COMPONENTS
   # autoware_msgs

@@ -1,10 +1,11 @@
 # mpc_tracker_ros
-Path tracking controller package by Nonlinear MPC using C/GMRES method
+Trajectory Tracking Controller for ROS Package Using Nonlinear Model Predictive Control (MPC) with C/GMRES Method
 
 ## Requirements
-- Ubuntu 18.04 or higher
-- gcc
+- Ubuntu 18.04 or 20.04
+- gcc 7.50 or higher
 - cmake 3.0.2 or higher
+- ROS Melodic or Noetic
 
 ## Third Party
 - [Eigen3](https://eigen.tuxfamily.org/index.php?title=Main_Page)
