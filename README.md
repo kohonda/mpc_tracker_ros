@@ -55,6 +55,8 @@ cd catkin_ws/src
 
 Then, start simulation with real-time plot and get the simulation result at `mpc_tracker_ros/simulation/simulation_result/result.csv` after termination.
 
+[sample movie](movie/sinwave05.gif)
+
 ## How to launch online node
 
 ## Parameters
