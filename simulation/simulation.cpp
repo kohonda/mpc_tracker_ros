@@ -7,6 +7,7 @@
 #include "mpc_tracker/mpc_simulator.hpp"
 #include "mpc_tracker/Twist.hpp"
 #include "mpc_tracker/frenet_state_filter.hpp"
+#include "mpc_tracker/matplotlibcpp.h"
 
 int main()
 {
@@ -128,14 +129,44 @@ int main()
                      << ego_pose_global.x
                      << ego_pose_global.y
                      << ego_pose_global.yaw
-                     << control_input_vec[MPC_INPUT::ANGULAR_VEL_YAW]
                      << control_input_vec[MPC_INPUT::TWIST_X]
+                     << control_input_vec[MPC_INPUT::ANGULAR_VEL_YAW]
                      << ego_pose_frenet.x_f
                      << ego_pose_frenet.y_f
                      << ego_pose_frenet.yaw_f
                      << nmpc_solver.getErrorNorm(current_time, current_state_vec_frenet, course_curvature,course_speed,drivable_width);
         /* clang-format on */
         csv.writeToFile(save_csv_file);
+
+        // for plot
+        std::vector<double> ego_pose_x(1);
+        std::vector<double> ego_pose_y(1);
+        if (static_cast<int>(current_time) % 1 == 0)
+        {
+            // get predictive state series
+            const std::array<std::vector<double>, MPC_STATE_SPACE::DIM> predicted_series = mpc_simulator.reproduct_predivted_state(ego_pose_global, control_input_series, sampling_time);
+
+            // clear previous plot
+            matplotlibcpp::clf();
+
+            ego_pose_x[0] = ego_pose_global.x;
+            ego_pose_y[0] = ego_pose_global.y;
+
+            matplotlibcpp::named_plot("Reference path", course_manager.get_mpc_course().x, course_manager.get_mpc_course().y, "g:");
+            matplotlibcpp::named_plot("Ego car global position", ego_pose_x, ego_pose_y, "or");
+            matplotlibcpp::named_plot("Planned path", predicted_series[MPC_STATE_SPACE::X_F], predicted_series[MPC_STATE_SPACE::Y_F], "b-");
+
+            matplotlibcpp::xlim(ego_pose_global.x - 10, ego_pose_global.x + 10);
+            matplotlibcpp::ylim(ego_pose_global.y - 10, ego_pose_global.y + 10);
+
+            // Add graph title
+            matplotlibcpp::title("Real Time Plotter");
+            // Enable legend.
+            matplotlibcpp::legend();
+
+            // Display plot continuously
+            matplotlibcpp::pause(0.01);
+        }
 
         // Pose & Twist update by simulator
         const auto updated_ego_pose_global = mpc_simulator.update_ego_state(current_time, ego_pose_global, control_input_vec, sampling_time);

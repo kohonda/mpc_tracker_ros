@@ -80,10 +80,19 @@ target_link_libraries(mpc_tracker_node
 )
 
 
+find_package(Python3 COMPONENTS Interpreter Development NumPy REQUIRED)
+find_package(Python3 COMPONENTS NumPy)
+
 add_executable(simulation
   simulation/simulation.cpp
   ${MPC_TRACKER_SRC}
   ${CGMRES_SOLVER_SRC}
+)
+
+target_link_libraries(simulation
+  Python3::Python
+  Python3::Module
+  Python3::NumPy
 )
 
 install(
