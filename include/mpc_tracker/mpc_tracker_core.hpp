@@ -12,7 +12,8 @@
 #include <tf2/utils.h>
 #include "mpc_tracker/course_manager.hpp"
 #include "mpc_tracker/frenet_serret_converter.hpp"
-#include "mpc_tracker/frenet_state_filter.hpp"
+#include "Twist.hpp"
+// #include "mpc_tracker/frenet_state_filter.hpp"
 #include "cgmres_solver/continuation_gmres.hpp"
 
 /**
@@ -66,6 +67,7 @@ private:
     };
     CGMRESParam cgmres_param_;
 
+    /*Variables*/
     struct RobotStatus
     {
         Pose robot_pose_global_;             //!< @brief Global robot pose used in MPC
@@ -74,21 +76,48 @@ private:
     };
     RobotStatus robot_status_;
 
-    std::unique_ptr<cgmres::ContinuationGMRES> nmpc_solver_ptr_;                  //!< @brief nonlinear mpc solver pointer
-    pathtrack_tools::CourseManager course_manager_;                               //!< @brief Manage reference path, reference speed and drivable area in MPC
-    pathtrack_tools::FrenetSerretConverter frenet_serret_converter_;              //!< @brief Converter between global coordinate and frenet-serret coordinate
-    std::unique_ptr<pathtrack_tools::FrenetStateFilter> frenet_state_filter_ptr_; //!< @brief Frenet state estimate from observed info
+    Twist prev_twist_cmd_;
 
+    /*function used in the predictive horizon of MPC*/
+    std::function<double(double)> path_curvature_ = [this](const double &x_f) { return this->course_manager_.get_curvature(x_f); };
+    std::function<double(double)> trajectory_speed_ = [this](const double &x_f) { return this->course_manager_.get_speed(x_f); };
+    std::function<double(double)> drivable_width_ = [this](const double &x_f) { return this->course_manager_.get_drivable_width(x_f); }; // not used now
+
+    /*Flags*/
+    bool is_robot_state_ok_ = false;
+    bool initial_solution_calculate_ = false;
+
+    /*Visualization info*/
+    // TODO
+    // 1. 予測状態, 2. 計算時間， 3. Fnorm
+
+    /*Library*/
+    std::unique_ptr<cgmres::ContinuationGMRES> nmpc_solver_ptr_;     //!< @brief nonlinear mpc solver pointer
+    pathtrack_tools::CourseManager course_manager_;                  //!< @brief Manage reference path, reference speed and drivable area in MPC
+    pathtrack_tools::FrenetSerretConverter frenet_serret_converter_; //!< @brief Converter between global coordinate and frenet-serret coordinate
+    // std::unique_ptr<pathtrack_tools::FrenetStateFilter> frenet_state_filter_ptr_; //!< @brief Frenet state estimate from observed info
+
+    /**
+     * @brief calculate and publish control input
+     * 
+     */
     void timer_callback(const ros::TimerEvent &);
 
     /**
-     * @brief odometryをサブスクライブして，poseとtwistをそのタイミングで更新する．odomはそのまま使用せず，tfを通す．
+     * @brief Subscribe to odometry and update pose and twist at that time. Pose is updated from tf, and twist is updated from odometry.
      *
      * @param [in] odom
      */
     void callback_odom(const nav_msgs::Odometry &odom);
 
+    /**
+     * @brief Update reference path from higher level planner and filter it.
+     * 
+     * @param [in] path 
+     */
     void callback_reference_path(const nav_msgs::Path &path);
+
+    void publish_twist(const Twist &twist_cmd) const;
 };
 
 #endif

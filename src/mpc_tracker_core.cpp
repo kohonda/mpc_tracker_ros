@@ -1,6 +1,6 @@
 #include "mpc_tracker/mpc_tracker_core.hpp"
 
-MPCTracker::MPCTracker() : nh_(""), private_nh_("~"), tf_listener_(tf_buffer_)
+MPCTracker::MPCTracker() : nh_(""), private_nh_("~"), tf_listener_(tf_buffer_), prev_twist_cmd_(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 {
     //  Set parameters from ros param
     /*control parameters*/
@@ -27,7 +27,7 @@ MPCTracker::MPCTracker() : nh_(""), private_nh_("~"), tf_listener_(tf_buffer_)
     // TODO : set mpc params
 
     /*Initialize frenet state filter*/
-    frenet_state_filter_ptr_ = std::make_unique<pathtrack_tools::FrenetStateFilter>(control_sampling_time_);
+    // frenet_state_filter_ptr_ = std::make_unique<pathtrack_tools::FrenetStateFilter>(control_sampling_time_);
 
     /*set up ros system*/
     timer_control_ = nh_.createTimer(ros::Duration(control_sampling_time_), &MPCTracker::timer_callback, this);
@@ -39,15 +39,67 @@ MPCTracker::MPCTracker() : nh_(""), private_nh_("~"), tf_listener_(tf_buffer_)
     private_nh_.param("in_odom_topic", in_odom_topic, static_cast<std::string>("odom"));
     private_nh_.param("robot_frame_id", robot_frame_id_, static_cast<std::string>("base_link"));
     private_nh_.param("map_frame_id", map_frame_id_, static_cast<std::string>("map"));
-    pub_twist_cmd_ = nh_.advertise<geometry_msgs::Twist>(out_twist_topic, 1);
+    pub_twist_cmd_ = nh_.advertise<geometry_msgs::Twist>(out_twist_topic, 1); // TODO: twist_timestampedに変更
     sub_ref_path_ = nh_.subscribe(in_refpath_topic, 1, &MPCTracker::callback_reference_path, this);
     sub_odom_ = nh_.subscribe(in_odom_topic, 1, &MPCTracker::callback_odom, this);
 };
 
 MPCTracker::~MPCTracker(){};
 
-void MPCTracker::timer_callback(const ros::TimerEvent &te){
+void MPCTracker::timer_callback(const ros::TimerEvent &te)
+{
+    /*status check*/
+    const int path_size = course_manager_.get_path_size();
+    if (path_size == 0 || !is_robot_state_ok_)
+    {
+        ROS_INFO("[MPC] MPC is not solved. ref_path_size: %d, is_pose_set: %d", path_size, is_robot_state_ok_);
+        publish_twist(prev_twist_cmd_);
+        return;
+    }
 
+    /*coordinate convert from euclid to frenet-serret*/
+    robot_status_.robot_pose_frenet_ = frenet_serret_converter_.global2frenet(course_manager_.get_mpc_course(), robot_status_.robot_pose_global_);
+
+    /*Set state vector*/
+    const std::vector<double> state_vec{robot_status_.robot_pose_frenet_.x_f, robot_status_.robot_pose_frenet_.y_f, robot_status_.robot_pose_frenet_.yaw_f};
+
+    /*Control input*/
+    double control_input_vec[MPC_INPUT::DIM] = {0.0};
+
+    /*Control input series for visualization */
+    std::array<std::vector<double>, MPC_INPUT::DIM> control_input_series; // TODO: デバッグ用にrvizに予測経路として表示する
+
+    /*Solve NMPC by C/GMRES method*/
+    const double current_time = ros::Time::now().toSec(); // Used when first increasing the prediction horizon.
+    if (!initial_solution_calculate_)
+    {
+        // The initial solution is calculated using Newton-GMRES method
+        nmpc_solver_ptr_->initializeSolution(current_time, state_vec, path_curvature_, trajectory_speed_, drivable_width_);
+        nmpc_solver_ptr_->getControlInput(control_input_vec);
+    }
+    else
+    {
+        // Update control_input_vec by C/GMRES method
+        const bool mpc_solver_error = nmpc_solver_ptr_->controlUpdate(current_time, state_vec, control_sampling_time_, path_curvature_, trajectory_speed_, drivable_width_, control_input_vec, &control_input_series);
+        if (mpc_solver_error)
+        {
+            ROS_ERROR("[MPC] Break down C/GMRES method.");
+            publish_twist(prev_twist_cmd_);
+            return;
+        }
+    }
+
+    /*Publish twist cmd*/
+    Twist twist_cmd;
+    twist_cmd.x = control_input_vec[MPC_INPUT::TWIST_X];
+    twist_cmd.y = 0.0;
+    twist_cmd.z = 0.0;
+    twist_cmd.roll = 0.0;
+    twist_cmd.pitch = 0.0;
+    twist_cmd.yaw = control_input_vec[MPC_INPUT::ANGULAR_VEL_YAW];
+    publish_twist(twist_cmd);
+
+    prev_twist_cmd_ = twist_cmd;
 };
 
 // Update robot pose when subscribe odometry msg
@@ -98,5 +150,17 @@ void MPCTracker::callback_reference_path(const nav_msgs::Path &path)
     // TODO : リサンプリングがひつようかも
     course_manager_.set_course_from_nav_msgs(path, reference_speed_);
 
-    ROS_INFO("[MPC] Path callback: receive path size = %lu", course_manager_.get_mpc_course().size());
+    ROS_INFO("[MPC] Path callback: receive path size = %d", course_manager_.get_mpc_course().size());
+};
+
+void MPCTracker::publish_twist(const Twist &twist_cmd) const
+{
+    geometry_msgs::Twist twist;
+    twist.linear.x = twist_cmd.x;
+    twist.linear.y = 0.0;
+    twist.linear.z = 0.0;
+    twist.angular.x = 0.0;
+    twist.angular.y = 0.0;
+    twist.angular.z = twist_cmd.roll;
+    pub_twist_cmd_.publish(twist);
 };
