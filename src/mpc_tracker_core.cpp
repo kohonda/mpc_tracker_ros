@@ -46,7 +46,7 @@ MPCTracker::MPCTracker() : nh_(""), private_nh_("~"), tf_listener_(tf_buffer_), 
 
 MPCTracker::~MPCTracker(){};
 
-void MPCTracker::timer_callback(const ros::TimerEvent &te)
+void MPCTracker::timer_callback([[maybe_unused]] const ros::TimerEvent &te)
 {
     /*status check*/
     const int path_size = course_manager_.get_path_size();

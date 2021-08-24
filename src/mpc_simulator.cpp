@@ -107,7 +107,7 @@ namespace pathtrack_tools
         return delayed_angle_input;
     }
 
-    std::array<double, MPC_STATE_SPACE::DIM> MPCSimulator::two_dw_without_delay(const double &current_time, const std::array<double, MPC_STATE_SPACE::DIM> &x, const std::array<double, MPC_INPUT::DIM> &u) const
+    std::array<double, MPC_STATE_SPACE::DIM> MPCSimulator::two_dw_without_delay([[maybe_unused]] const double &current_time, const std::array<double, MPC_STATE_SPACE::DIM> &x, const std::array<double, MPC_INPUT::DIM> &u) const
     {
         std::array<double, MPC_STATE_SPACE::DIM> dx;
         const double curvature = 0.0;

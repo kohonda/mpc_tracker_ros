@@ -3,8 +3,8 @@
 
 namespace cgmres
 {
-    void NMPCModel::stateFunc(const double t, const std::vector<double> &x, const double *u, std::function<double(double)> &traj_curvature, std::function<double(double)> &traj_speed,
-                              std::function<double(double)> &drivable_width, std::vector<double> &dx) const
+    void NMPCModel::stateFunc([[maybe_unused]] const double t, const std::vector<double> &x, const double *u, std::function<double(double)> &traj_curvature, [[maybe_unused]] std::function<double(double)> &traj_speed,
+                              [[maybe_unused]] std::function<double(double)> &drivable_width, std::vector<double> &dx) const
     {
         const double curvature = traj_curvature(x[MPC_STATE_SPACE::X_F]);
 
@@ -13,8 +13,8 @@ namespace cgmres
         dx[MPC_STATE_SPACE::YAW_F] = -curvature * u[MPC_INPUT::TWIST_X] * cos(x[MPC_STATE_SPACE::YAW_F]) / (-curvature * x[MPC_STATE_SPACE::Y_F] + 1) + u[MPC_INPUT::ANGULAR_VEL_YAW];
     }
 
-    void NMPCModel::phixFunc(const double t, const std::vector<double> &x, std::function<double(double)> &traj_curvature, std::function<double(double)> &traj_speed,
-                             std::function<double(double)> &drivable_width, std::vector<double> &phix) const
+    void NMPCModel::phixFunc([[maybe_unused]] const double t, const std::vector<double> &x, [[maybe_unused]] std::function<double(double)> &traj_curvature, [[maybe_unused]] std::function<double(double)> &traj_speed,
+                             [[maybe_unused]] std::function<double(double)> &drivable_width, std::vector<double> &phix) const
     {
         // const double curvature = traj_curvature(x[2]);
         // const double ref_speed = traj_speed(x[2]);
@@ -24,8 +24,8 @@ namespace cgmres
         phix[MPC_STATE_SPACE::YAW_F] = (1.0 / 2.0) * q_terminal_[MPC_STATE_SPACE::YAW_F] * (2 * x[MPC_STATE_SPACE::YAW_F] - 2 * x_ref_[MPC_STATE_SPACE::YAW_F]);
     }
 
-    void NMPCModel::hxFunc(const double t, const std::vector<double> &x, const double *u, const std::vector<double> &lmd, std::function<double(double)> &traj_curvature,
-                           std::function<double(double)> &traj_speed, std::function<double(double)> &drivable_width, std::vector<double> &hx) const
+    void NMPCModel::hxFunc([[maybe_unused]] const double t, const std::vector<double> &x, const double *u, const std::vector<double> &lmd, std::function<double(double)> &traj_curvature,
+                           [[maybe_unused]] std::function<double(double)> &traj_speed, [[maybe_unused]] std::function<double(double)> &drivable_width, std::vector<double> &hx) const
     {
         const double curvature = traj_curvature(x[2]);
         // const double ref_speed = traj_speed(x[2]);
@@ -35,8 +35,8 @@ namespace cgmres
         hx[MPC_STATE_SPACE::YAW_F] = curvature * lmd[MPC_STATE_SPACE::YAW_F] * u[MPC_INPUT::TWIST_X] * sin(x[MPC_STATE_SPACE::YAW_F]) / (-curvature * x[MPC_STATE_SPACE::Y_F] + 1) - lmd[MPC_STATE_SPACE::X_F] * u[MPC_INPUT::TWIST_X] * sin(x[MPC_STATE_SPACE::YAW_F]) / (-curvature * x[MPC_STATE_SPACE::Y_F] + 1) + lmd[MPC_STATE_SPACE::Y_F] * u[MPC_INPUT::TWIST_X] * cos(x[MPC_STATE_SPACE::YAW_F]) + (1.0 / 2.0) * q_[MPC_STATE_SPACE::YAW_F] * (2 * x[MPC_STATE_SPACE::YAW_F] - 2 * x_ref_[MPC_STATE_SPACE::YAW_F]);
     }
 
-    void NMPCModel::huFunc(const double t, const std::vector<double> &x, const double *u, const std::vector<double> &lmd, std::function<double(double)> &traj_curvature,
-                           std::function<double(double)> &traj_speed, std::function<double(double)> &drivable_width, double *hu) const
+    void NMPCModel::huFunc([[maybe_unused]] const double t, const std::vector<double> &x, const double *u, const std::vector<double> &lmd, std::function<double(double)> &traj_curvature,
+                           std::function<double(double)> &traj_speed, [[maybe_unused]] std::function<double(double)> &drivable_width, double *hu) const
     {
         const double curvature = traj_curvature(x[2]);
         const double ref_speed = traj_speed(x[2]);
