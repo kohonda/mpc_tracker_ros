@@ -1,18 +1,26 @@
 # mpc_tracker_ros
 Trajectory Tracking Controller for ROS Package Using Nonlinear Model Predictive Control (MPC) with C/GMRES Method
 
+
+
 ## Requirements
+
 - Ubuntu 18.04 or 20.04
 - gcc 7.50 or higher
 - cmake 3.0.2 or higher
 - ROS Melodic or Noetic
 
+
+
 ## Third Party
+
 - [Eigen3](https://eigen.tuxfamily.org/index.php?title=Main_Page)
 - [C/GMRES Solver](https://github.com/mayataka/autogenu-jupyter)
 - [CSV Writer](https://github.com/al-eax/CSVWriter) (for offline simulation)
 - [CSV Parser](https://github.com/d99kris/rapidcsv) (for offine simulation)
 - [matplotlib-cpp](https://github.com/lava/matplotlib-cpp) (for offline simulation)
+
+
 
 ## Pre-Installation
 
@@ -27,6 +35,8 @@ sudo apt install python3-matplotlib, python3-numpy
 
 pip3 install -U setuptools
 ```
+
+
 
 ## How to Build
 
@@ -46,6 +56,8 @@ rosdep install -y --from-paths src --ignore-src --rosdistro $ROS_DISTRO
 colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release 
 ```
 
+
+
 ## How to run offline simulation
 
 ```bash
@@ -58,7 +70,20 @@ Then, start simulation with real-time plot and get the simulation result at `mpc
 
 [sample movie](movie/sinwave05.gif)
 
+
+
 ## How to launch online node
+
+```bash
+cd catkin_ws
+
+source install/setup.bash
+
+roslaunch mpc_tracker mpc_tracker.launch
+```
+
+
 
 ## Parameters
 
+TODO

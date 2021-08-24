@@ -71,6 +71,9 @@ namespace cgmres
 
         // Returns the dimension of the constraints.
         int dim_constraints() const;
+
+        // Set parameters
+        void set_parameters(const std::array<double, MPC_STATE_SPACE::DIM> &q, const std::array<double, MPC_STATE_SPACE::DIM> &q_terminal, const std::array<double, MPC_INPUT::DIM> &r);
     };
 
 } // namespace cgmres

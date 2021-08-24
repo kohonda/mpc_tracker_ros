@@ -60,4 +60,11 @@ namespace cgmres
         return dim_constraints_;
     }
 
+    void NMPCModel::set_parameters(const std::array<double, MPC_STATE_SPACE::DIM> &q, const std::array<double, MPC_STATE_SPACE::DIM> &q_terminal, const std::array<double, MPC_INPUT::DIM> &r)
+    {
+        q_ = q;
+        q_terminal_ = q_terminal;
+        r_ = r;
+    }
+
 } // namespace cgmres

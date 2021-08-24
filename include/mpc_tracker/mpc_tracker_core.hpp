@@ -50,7 +50,7 @@ private:
     tf2_ros::Buffer tf_buffer_;
     tf2_ros::TransformListener tf_listener_;
 
-    /*control parametes*/
+    /*control system parametes*/
     double control_sampling_time_; //!< @brief control interval [s]
     // TODO: とりあえずreference speedは固定.現状どうやって車速を計画して埋め込んでいる？
     double reference_speed_; //!< @brief robot reference speed [m/s]
@@ -67,6 +67,15 @@ private:
     };
     CGMRESParam cgmres_param_;
 
+    /*MPC parameters*/
+    struct MPCParam
+    {
+        std::array<double, MPC_STATE_SPACE::DIM> q_;          //!< @brief Weight of state for stage cost in MPC
+        std::array<double, MPC_STATE_SPACE::DIM> q_terminal_; //!< @brief Weight of state for terminal cost in MPC
+        std::array<double, MPC_INPUT::DIM> r_;                //!< @brief Weight of input for stage cost in MPC
+    };
+    MPCParam mpc_param_;
+
     /*Variables*/
     struct RobotStatus
     {
@@ -76,11 +85,11 @@ private:
     };
     RobotStatus robot_status_;
 
-    Twist prev_twist_cmd_;
+    Twist prev_twist_cmd_; //!< @brief published twist command just before
 
     /*function used in the predictive horizon of MPC*/
-    std::function<double(double)> path_curvature_ = [this](const double &x_f) { return this->course_manager_.get_curvature(x_f); };
-    std::function<double(double)> trajectory_speed_ = [this](const double &x_f) { return this->course_manager_.get_speed(x_f); };
+    std::function<double(double)> path_curvature_ = [this](const double &x_f) { return this->course_manager_.get_curvature(x_f); };      //!< @brief return curvature from pose x_f in frenet coordinate
+    std::function<double(double)> trajectory_speed_ = [this](const double &x_f) { return this->course_manager_.get_speed(x_f); };        //!< @brief return reference speed from pose x_f in frenet coordinate
     std::function<double(double)> drivable_width_ = [this](const double &x_f) { return this->course_manager_.get_drivable_width(x_f); }; // not used now
 
     /*Flags*/

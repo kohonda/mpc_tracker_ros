@@ -9,7 +9,7 @@ map_frame_id: map
 control_sampling_time: 0.1 # [s] control interval
 reference_speed: 1.0 # [m/s]
 
-# -- C/GMRES parameters --
+# -- C/GMRES solver parameters --
 Tf: 1.0 # Length of predictive horizon in C/GMRES [s]
 alpha: 0.5 # The length horizon at time t is given by T_f * (1-exp(-alpha*t))
 N: 10 # The number of discrete of the predictive horizon
@@ -18,3 +18,9 @@ zeta: 62.5 # A parameter for stabilization of the C/GMRES method
 kmax: 5 # dimension of the Krylov subspace and maximum iteration number
 
 # -- MPC parameters --
+weight_lat_error: 1.0 # Weight for lateral error from reference path in stage cost
+weight_yaw_error: 1.0 # Weight for yaw error from reference path in stage cost
+terminal_weight_lat_error: 1.0 # Weight for lateral error from reference path in terminal cost
+terminal_weight_yaw_error: 1.0 # Weight for yaw error from reference path in terminal cost
+weight_input_angular_yaw: 1.0 # Weight for angular velocity input
+weight_input_twist_x: 1.0 # Weight for forward/backward velocity input

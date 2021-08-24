@@ -5,6 +5,7 @@ MPCTracker::MPCTracker() : nh_(""), private_nh_("~"), tf_listener_(tf_buffer_), 
     //  Set parameters from ros param
     /*control parameters*/
     private_nh_.param("control_sampling_time", control_sampling_time_, static_cast<double>(0.1));
+    private_nh_.param("reference_speed", reference_speed_, static_cast<double>(1.0));
 
     /*cgmres parameters*/
     private_nh_.param("Tf", cgmres_param_.Tf_, static_cast<double>(1.0));
@@ -15,16 +16,22 @@ MPCTracker::MPCTracker() : nh_(""), private_nh_("~"), tf_listener_(tf_buffer_), 
     private_nh_.param("kmax", cgmres_param_.kmax_, static_cast<int>(5));
 
     /*mpc parameters*/
-    // TODO: set mpc parameters
-    private_nh_.param("reference_speed", reference_speed_, static_cast<double>(1.0));
-    // max, min
+    mpc_param_.q_.at(MPC_STATE_SPACE::X_F) = 0.0;
+    private_nh_.param("weight_lat_error", mpc_param_.q_.at(MPC_STATE_SPACE::Y_F), static_cast<double>(1.0));
+    private_nh_.param("weight_yaw_error", mpc_param_.q_.at(MPC_STATE_SPACE::YAW_F), static_cast<double>(1.0));
+    mpc_param_.q_terminal_.at(MPC_STATE_SPACE::X_F) = 0.0;
+    private_nh_.param("terminal_weight_lat_error", mpc_param_.q_terminal_.at(MPC_STATE_SPACE::Y_F), static_cast<double>(1.0));
+    private_nh_.param("terminal_weight_yaw_error", mpc_param_.q_terminal_.at(MPC_STATE_SPACE::YAW_F), static_cast<double>(1.0));
+    private_nh_.param("weight_input_angular_yaw", mpc_param_.r_.at(MPC_INPUT::ANGULAR_VEL_YAW), static_cast<double>(1.0));
+    private_nh_.param("weight_input_twist_x", mpc_param_.r_.at(MPC_INPUT::TWIST_X), static_cast<double>(1.0));
+    // TODO: max, min of input
 
     /*Initialize C/GMRES Solver */
     nmpc_solver_ptr_ =
         std::make_unique<cgmres::ContinuationGMRES>(cgmres_param_.Tf_, cgmres_param_.alpha_, cgmres_param_.N_, cgmres_param_.finite_distance_increment_, cgmres_param_.zeta_, cgmres_param_.kmax_);
     const double solution_initial_guess[MPC_INPUT::DIM] = {0.01, 0.01};
     nmpc_solver_ptr_->setParametersForInitialization(solution_initial_guess, 1e-06, 50);
-    // TODO : set mpc params
+    nmpc_solver_ptr_->continuation_problem_.ocp_.model_.set_parameters(mpc_param_.q_, mpc_param_.q_terminal_, mpc_param_.r_);
 
     /*Initialize frenet state filter*/
     // frenet_state_filter_ptr_ = std::make_unique<pathtrack_tools::FrenetStateFilter>(control_sampling_time_);
