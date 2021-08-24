@@ -1,0 +1,11 @@
+<launch>
+
+    <arg name="mpc_tracker_param_path" default="$(find mpc_tracker)/config/mpc_tracker_param.yaml"/>
+
+    <!-- mpc for trajectory following -->
+    <node pkg="mpc_tracker" type="mpc_tracker_node" name="mpc_tracker" output="screen">
+        <rosparam command="load" file="$(arg mpc_tracker_param_path)"/>
+    </node>
+  
+  </launch>
+  

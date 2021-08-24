@@ -1,0 +1,20 @@
+# -- ros system --
+out_twist_topic: twist_cmd
+in_refpath_topic: reference_path
+in_odom_topic: odom
+robot_frame_id: base_link
+map_frame_id: map
+
+# -- control system --
+control_sampling_time: 0.1 # [s] control interval
+reference_speed: 1.0 # [m/s]
+
+# -- C/GMRES parameters --
+Tf: 1.0 # Length of predictive horizon in C/GMRES [s]
+alpha: 0.5 # The length horizon at time t is given by T_f * (1-exp(-alpha*t))
+N: 10 # The number of discrete of the predictive horizon
+finite_distance_increment: 0.0002 # Step length of the finite difference in C/GMRES method
+zeta: 62.5 # A parameter for stabilization of the C/GMRES method
+kmax: 5 # dimension of the Krylov subspace and maximum iteration number
+
+# -- MPC parameters --

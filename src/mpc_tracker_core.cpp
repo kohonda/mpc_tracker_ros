@@ -44,7 +44,12 @@ MPCTracker::MPCTracker() : nh_(""), private_nh_("~"), tf_listener_(tf_buffer_), 
     sub_odom_ = nh_.subscribe(in_odom_topic, 1, &MPCTracker::callback_odom, this);
 };
 
-MPCTracker::~MPCTracker(){};
+MPCTracker::~MPCTracker()
+{
+    ROS_INFO("Destoruct MPC tracker node");
+    Twist stop_twist(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+    publish_twist(stop_twist);
+};
 
 void MPCTracker::timer_callback([[maybe_unused]] const ros::TimerEvent &te)
 {
