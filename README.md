@@ -47,6 +47,8 @@ cd catkin_ws/src
 
 git clone git@github.com:kohonda/mpc_tracker_ros.git
 
+git clone git@github.com:Autoware-AI/messages.git
+
 cd ..
 
 rosdep update

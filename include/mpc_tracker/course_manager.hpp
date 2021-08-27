@@ -62,7 +62,7 @@ namespace pathtrack_tools
        * 
        * @param path 
        */
-      void set_course_from_nav_msgs(const nav_msgs::Path &path, const double &reference_speed);
+      void set_course_from_nav_msgs(const nav_msgs::Path &path, const double &reference_speed, const size_t &zero_speed_points_around_goal);
 
       /**
      * @brief Get curvature of the reference path in pose_x_f with interpolation．
