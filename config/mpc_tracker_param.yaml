@@ -8,6 +8,7 @@ map_frame_id: map
 # -- control system --
 control_sampling_time: 0.1 # [s] control interval
 reference_speed: 1.0 # [m/s]
+zero_speed_points_around_goal: 1 #Number of waypoints which are set the speed to zero for stop at the goal
 
 # -- C/GMRES solver parameters --
 Tf: 1.0 # Length of predictive horizon in C/GMRES [s]
