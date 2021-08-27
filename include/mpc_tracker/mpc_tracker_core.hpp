@@ -64,6 +64,7 @@ private:
     // TODO: とりあえずreference speedは固定.-> reference pathをposeのみならず車速埋め込みにする
     double reference_speed_;            //!< @brief robot reference speed [m/s]
     int zero_speed_points_around_goal_; //!< @brief Number of waypoints which are set the speed to zero for stop at the goal
+    double goal_judgment_distance_;     //!< @brief Threshold for goal judgment [m]
 
     /*cgmres solver parameters*/
     struct CGMRESParam
@@ -95,7 +96,8 @@ private:
     };
     RobotStatus robot_status_;
 
-    Twist prev_twist_cmd_; //!< @brief published twist command just before
+    Twist prev_twist_cmd_;          //!< @brief published twist command just before
+    Pose reference_path_goal_pose_; //!< @brief pose at the final reference point
 
     /*function used in the predictive horizon of MPC*/
     std::function<double(double)> path_curvature_ = [this](const double &x_f) { return this->course_manager_.get_curvature(x_f); };      //!< @brief return curvature from pose x_f in frenet coordinate

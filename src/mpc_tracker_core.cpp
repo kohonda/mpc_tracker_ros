@@ -1,12 +1,13 @@
 #include "mpc_tracker/mpc_tracker_core.hpp"
 
-MPCTracker::MPCTracker() : nh_(""), private_nh_("~"), tf_listener_(tf_buffer_), prev_twist_cmd_(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+MPCTracker::MPCTracker() : nh_(""), private_nh_("~"), tf_listener_(tf_buffer_), prev_twist_cmd_(0.0, 0.0, 0.0, 0.0, 0.0, 0.0), reference_path_goal_pose_(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 {
     //  Set parameters from ros param
     /*control parameters*/
     private_nh_.param("control_sampling_time", control_sampling_time_, static_cast<double>(0.1));
     private_nh_.param("reference_speed", reference_speed_, static_cast<double>(1.0));
     private_nh_.param("zero_speed_points_around_goal", zero_speed_points_around_goal_, static_cast<int>(1));
+    private_nh_.param("goal_judgement_distance", goal_judgment_distance_, static_cast<double>(0.1));
 
     /*cgmres parameters*/
     private_nh_.param("Tf", cgmres_param_.Tf_, static_cast<double>(1.0));
@@ -71,8 +72,6 @@ MPCTracker::~MPCTracker()
 
 void MPCTracker::timer_callback([[maybe_unused]] const ros::TimerEvent &te)
 {
-    // TODO: ゴール判定 -> report
-    // const double dist_to_goal =
 
     /*Guard higher level planner permit*/
     if (!is_permit_control_)
@@ -84,11 +83,15 @@ void MPCTracker::timer_callback([[maybe_unused]] const ros::TimerEvent &te)
     }
 
     /*Guard finishing goal*/
-    if (!is_finish_goal_)
+    if (is_finish_goal_)
     {
+        /*publish zero twist*/
         Twist zero_twist(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
         ROS_INFO("[MPC] Finishing goal");
         publish_twist(zero_twist);
+
+        /*report to supervisor and reset is_permit_control_*/
+        report_reached_goal();
 
         return;
     }
@@ -207,6 +210,17 @@ void MPCTracker::callback_odom(const nav_msgs::Odometry &odom)
     robot_status_.robot_twist_.roll = odom.twist.twist.angular.x; // not used now
     robot_status_.robot_twist_.pitch = odom.twist.twist.linear.y; // note used now
     robot_status_.robot_twist_.yaw = odom.twist.twist.angular.z;
+
+    /*Checking to know if the robot has reached thd goal*/
+    const double dist_to_goal = std::hypot(robot_status_.robot_pose_global_.x - reference_path_goal_pose_.x, robot_status_.robot_pose_global_.y - reference_path_goal_pose_.y);
+    if (dist_to_goal <= goal_judgment_distance_)
+    {
+        is_finish_goal_ = true;
+    }
+    else
+    {
+        is_finish_goal_ = false;
+    }
 };
 
 // update reference_course in MPC and calculate curvature
@@ -222,6 +236,10 @@ void MPCTracker::callback_reference_path(const nav_msgs::Path &path)
     // TODO::NOTE: NOW SET REFERENCE SPEED IS CONSTANT
     // TODO : リサンプリングがひつようかも
     course_manager_.set_course_from_nav_msgs(path, reference_speed_, static_cast<int>(zero_speed_points_around_goal_));
+
+    /*Set final reference point as goal*/
+    reference_path_goal_pose_.x = path.poses.back().pose.position.x;
+    reference_path_goal_pose_.y = path.poses.back().pose.position.y;
 
     ROS_INFO("[MPC] Path callback: receive path size = %d", course_manager_.get_mpc_course().size());
 };
@@ -308,8 +326,6 @@ visualization_msgs::MarkerArray MPCTracker::convert_predictivestate2marker(const
 
 void MPCTracker::report_reached_goal()
 {
-    /*flag true*/
-    is_finish_goal_ = true;
 
     /*Report to supervisor*/
     autoware_msgs::Trigger goal_reached_srv_call;
