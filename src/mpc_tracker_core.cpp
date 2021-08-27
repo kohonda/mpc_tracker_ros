@@ -52,9 +52,9 @@ MPCTracker::MPCTracker() : nh_(""), private_nh_("~"), tf_listener_(tf_buffer_), 
 
     /*Set publisher for visualization*/
     mpc_simulator_ptr_ = std::make_unique<pathtrack_tools::MPCSimulator>(control_sampling_time_);
-    pub_predictive_pose_ = private_nh_.advertise<visualization_msgs::MarkerArray>("mpc/predictive_pose", 1);
-    pub_calculation_time_ = private_nh_.advertise<std_msgs::Float32>("mpc/calculation_time", 1);
-    pub_calculation_time_ = private_nh_.advertise<std_msgs::Float32>("mpc/F_norm", 1);
+    pub_predictive_pose_ = private_nh_.advertise<visualization_msgs::MarkerArray>("predictive_pose", 1);
+    pub_calculation_time_ = private_nh_.advertise<std_msgs::Float32>("calculation_time", 1);
+    pub_F_norm_ = private_nh_.advertise<std_msgs::Float32>("F_norm", 1);
 };
 
 MPCTracker::~MPCTracker()
