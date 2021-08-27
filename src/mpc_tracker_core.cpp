@@ -49,6 +49,12 @@ MPCTracker::MPCTracker() : nh_(""), private_nh_("~"), tf_listener_(tf_buffer_), 
     pub_twist_cmd_ = nh_.advertise<geometry_msgs::Twist>(out_twist_topic, 1); // TODO: twist_timestampedに変更
     sub_ref_path_ = nh_.subscribe(in_refpath_topic, 1, &MPCTracker::callback_reference_path, this);
     sub_odom_ = nh_.subscribe(in_odom_topic, 1, &MPCTracker::callback_odom, this);
+
+    /*Set publisher for visualization*/
+    mpc_simulator_ptr_ = std::make_unique<pathtrack_tools::MPCSimulator>(control_sampling_time_);
+    pub_predictive_pose_ = private_nh_.advertise<visualization_msgs::MarkerArray>("mpc/predictive_pose", 1);
+    pub_calculation_time_ = private_nh_.advertise<std_msgs::Float32>("mpc/calculation_time", 1);
+    pub_calculation_time_ = private_nh_.advertise<std_msgs::Float32>("mpc/F_norm", 1);
 };
 
 MPCTracker::~MPCTracker()
@@ -60,6 +66,8 @@ MPCTracker::~MPCTracker()
 
 void MPCTracker::timer_callback([[maybe_unused]] const ros::TimerEvent &te)
 {
+    stop_watch_.lap();
+
     /*status check*/
     const int path_size = course_manager_.get_path_size();
     if (path_size == 0 || !is_robot_state_ok_)
@@ -79,7 +87,7 @@ void MPCTracker::timer_callback([[maybe_unused]] const ros::TimerEvent &te)
     double control_input_vec[MPC_INPUT::DIM] = {0.0};
 
     /*Control input series for visualization */
-    std::array<std::vector<double>, MPC_INPUT::DIM> control_input_series; // TODO: デバッグ用にrvizに予測経路として表示する
+    std::array<std::vector<double>, MPC_INPUT::DIM> control_input_series;
 
     /*Solve NMPC by C/GMRES method*/
     const double current_time = ros::Time::now().toSec(); // Used when first increasing the prediction horizon.
@@ -101,6 +109,8 @@ void MPCTracker::timer_callback([[maybe_unused]] const ros::TimerEvent &te)
         }
     }
 
+    const double calculation_time = stop_watch_.lap();
+
     /*Publish twist cmd*/
     Twist twist_cmd;
     twist_cmd.x = control_input_vec[MPC_INPUT::TWIST_X];
@@ -112,6 +122,20 @@ void MPCTracker::timer_callback([[maybe_unused]] const ros::TimerEvent &te)
     publish_twist(twist_cmd);
 
     prev_twist_cmd_ = twist_cmd;
+
+    /*Visualization*/
+    const std::array<std::vector<double>, MPC_STATE_SPACE::DIM> predictive_poses = mpc_simulator_ptr_->reproduct_predivted_state(robot_status_.robot_pose_global_, control_input_series, control_sampling_time_);
+    const visualization_msgs::MarkerArray markers = convert_predictivestate2marker(predictive_poses, "mpc_predictive_pose", map_frame_id_, 0.99, 0.99, 0.99, 0.2);
+    pub_predictive_pose_.publish(markers);
+
+    std_msgs::Float32 calculation_time_msg;
+    calculation_time_msg.data = static_cast<float>(calculation_time);
+    pub_calculation_time_.publish(calculation_time_msg);
+
+    std_msgs::Float32 F_norm_msg;
+    const double F_norm = nmpc_solver_ptr_->getErrorNorm(current_time, state_vec, path_curvature_, trajectory_speed_, drivable_width_);
+    F_norm_msg.data = static_cast<float>(F_norm);
+    pub_F_norm_.publish(F_norm_msg);
 };
 
 // Update robot pose when subscribe odometry msg
@@ -176,3 +200,61 @@ void MPCTracker::publish_twist(const Twist &twist_cmd) const
     twist.angular.z = twist_cmd.roll;
     pub_twist_cmd_.publish(twist);
 };
+
+visualization_msgs::MarkerArray MPCTracker::convert_predictivestate2marker(const std::array<std::vector<double>, MPC_STATE_SPACE::DIM> &predictive_state, const std::string &name_space, const std::string &frame_id, const double &r, const double &g, const double &b, const double &z) const
+{
+    visualization_msgs::MarkerArray marker_array;
+
+    /*Add line*/
+    visualization_msgs::Marker marker;
+    marker.header.frame_id = frame_id;
+    marker.header.stamp = ros::Time();
+    marker.ns = name_space + "/line";
+    marker.id = 0;
+    marker.type = visualization_msgs::Marker::LINE_STRIP;
+    marker.scale.x = 0.15;
+    marker.scale.y = 0.3;
+    marker.scale.z = 0.3;
+    marker.color.a = 0.9;
+    marker.color.r = r;
+    marker.color.g = g;
+    marker.color.b = b;
+    for (size_t i = 0; i < predictive_state.at(0).size(); i++)
+    {
+        geometry_msgs::Point p;
+        p.x = predictive_state.at(MPC_STATE_SPACE::X_F).at(i);
+        p.y = predictive_state.at(MPC_STATE_SPACE::Y_F).at(i);
+        p.z = z;
+        marker.points.push_back(p);
+    }
+
+    /*Add pose as arrow*/
+    visualization_msgs::Marker marker_poses;
+    marker_poses.header.frame_id = frame_id;
+    marker_poses.header.stamp = ros::Time();
+    marker_poses.ns = name_space + "/poses";
+    marker_poses.lifetime = ros::Duration(0.5);
+    marker_poses.type = visualization_msgs::Marker::ARROW;
+    marker_poses.action = visualization_msgs::Marker::ADD;
+    marker_poses.scale.x = 0.2;
+    marker_poses.scale.y = 0.1;
+    marker_poses.scale.z = 0.2;
+    marker_poses.color.a = 0.99; // Don't forget to set the alpha!
+    marker_poses.color.r = r;
+    marker_poses.color.g = g;
+    marker_poses.color.b = b;
+
+    for (size_t i = 0; i < predictive_state.at(0).size(); i++)
+    {
+        marker_poses.id = i;
+        marker_poses.pose.position.x = predictive_state.at(MPC_STATE_SPACE::X_F).at(i);
+        marker_poses.pose.position.y = predictive_state.at(MPC_STATE_SPACE::Y_F).at(i);
+        marker_poses.pose.position.z = z;
+        tf2::Quaternion q;
+        q.setRPY(0.0, 0.0, predictive_state.at(MPC_STATE_SPACE::YAW_F).at(i));
+        marker_poses.pose.orientation = tf2::toMsg(q);
+        marker_array.markers.push_back(marker_poses);
+    }
+
+    return marker_array;
+}

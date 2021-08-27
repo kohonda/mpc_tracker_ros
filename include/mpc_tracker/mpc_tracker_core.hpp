@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <ros/ros.h>
+#include <std_msgs/Float32.h>
 #include <geometry_msgs/Twist.h>
 #include <nav_msgs/Path.h>
 #include <nav_msgs/Odometry.h>
@@ -10,11 +11,15 @@
 #include <tf2_ros/transform_broadcaster.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <tf2/utils.h>
+#include <visualization_msgs/Marker.h>
+#include <visualization_msgs/MarkerArray.h>
 #include "mpc_tracker/course_manager.hpp"
 #include "mpc_tracker/frenet_serret_converter.hpp"
 #include "Twist.hpp"
 // #include "mpc_tracker/frenet_state_filter.hpp"
 #include "cgmres_solver/continuation_gmres.hpp"
+#include "mpc_tracker/mpc_simulator.hpp"
+#include "StopWatch.hpp"
 
 /**
  * @class waypoint tracker class
@@ -52,7 +57,7 @@ private:
 
     /*control system parametes*/
     double control_sampling_time_; //!< @brief control interval [s]
-    // TODO: とりあえずreference speedは固定.現状どうやって車速を計画して埋め込んでいる？
+    // TODO: とりあえずreference speedは固定.-> reference pathをposeのみならず車速埋め込みにする
     double reference_speed_; //!< @brief robot reference speed [m/s]
 
     /*cgmres solver parameters*/
@@ -97,20 +102,24 @@ private:
     bool initial_solution_calculate_ = false;
 
     /*Visualization info*/
-    // TODO
-    // 1. 予測状態, 2. 計算時間， 3. Fnorm
+    ros::Publisher pub_predictive_pose_;  //! @brief MPC predictive pose publisher
+    ros::Publisher pub_calculation_time_; //! @brief calculation time publisher
+    ros::Publisher pub_F_norm_;           //! @brief F norm is Deviation from optimal solution
 
     /*Library*/
-    std::unique_ptr<cgmres::ContinuationGMRES> nmpc_solver_ptr_;     //!< @brief nonlinear mpc solver pointer
-    pathtrack_tools::CourseManager course_manager_;                  //!< @brief Manage reference path, reference speed and drivable area in MPC
-    pathtrack_tools::FrenetSerretConverter frenet_serret_converter_; //!< @brief Converter between global coordinate and frenet-serret coordinate
+    std::unique_ptr<cgmres::ContinuationGMRES> nmpc_solver_ptr_;       //!< @brief nonlinear mpc solver pointer
+    pathtrack_tools::CourseManager course_manager_;                    //!< @brief Manage reference path, reference speed and drivable area in MPC
+    pathtrack_tools::FrenetSerretConverter frenet_serret_converter_;   //!< @brief Converter between global coordinate and frenet-serret coordinate
+    std::unique_ptr<pathtrack_tools::MPCSimulator> mpc_simulator_ptr_; //!< @brief Reproduct MPC predictive state
+    StopWatch stop_watch_;
     // std::unique_ptr<pathtrack_tools::FrenetStateFilter> frenet_state_filter_ptr_; //!< @brief Frenet state estimate from observed info
 
     /**
      * @brief calculate and publish control input
      * 
      */
-    void timer_callback(const ros::TimerEvent &);
+    void
+    timer_callback(const ros::TimerEvent &);
 
     /**
      * @brief Subscribe to odometry and update pose and twist at that time. Pose is updated from tf, and twist is updated from odometry.
@@ -127,6 +136,8 @@ private:
     void callback_reference_path(const nav_msgs::Path &path);
 
     void publish_twist(const Twist &twist_cmd) const;
+
+    visualization_msgs::MarkerArray convert_predictivestate2marker(const std::array<std::vector<double>, MPC_STATE_SPACE::DIM> &predictive_state, const std::string &name_space, const std::string &frame_id, const double &r, const double &g, const double &b, const double &z) const;
 };
 
 #endif
