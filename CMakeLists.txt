@@ -8,7 +8,7 @@ add_compile_options(-O3 -fopenmp)
 
 
 find_package(catkin REQUIRED COMPONENTS
-  # autoware_msgs
+  autoware_msgs
   geometry_msgs
   nav_msgs
   roscpp
@@ -29,7 +29,7 @@ catkin_package(
   INCLUDE_DIRS
     include
   CATKIN_DEPENDS
-    # autoware_msgs
+    autoware_msgs
     geometry_msgs
     nav_msgs
     roscpp

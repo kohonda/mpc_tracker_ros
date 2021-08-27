@@ -29,7 +29,7 @@ MPCTracker::MPCTracker() : nh_(""), private_nh_("~"), tf_listener_(tf_buffer_), 
     /*Initialize C/GMRES Solver */
     nmpc_solver_ptr_ =
         std::make_unique<cgmres::ContinuationGMRES>(cgmres_param_.Tf_, cgmres_param_.alpha_, cgmres_param_.N_, cgmres_param_.finite_distance_increment_, cgmres_param_.zeta_, cgmres_param_.kmax_);
-    const double solution_initial_guess[MPC_INPUT::DIM] = {0.01, 0.01};
+    const double solution_initial_guess[MPC_INPUT::DIM] = { 0.01, 0.01 };
     nmpc_solver_ptr_->setParametersForInitialization(solution_initial_guess, 1e-06, 50);
     nmpc_solver_ptr_->continuation_problem_.ocp_.model_.set_parameters(mpc_param_.q_, mpc_param_.q_terminal_, mpc_param_.r_);
 
@@ -46,15 +46,19 @@ MPCTracker::MPCTracker() : nh_(""), private_nh_("~"), tf_listener_(tf_buffer_), 
     private_nh_.param("in_odom_topic", in_odom_topic, static_cast<std::string>("odom"));
     private_nh_.param("robot_frame_id", robot_frame_id_, static_cast<std::string>("base_link"));
     private_nh_.param("map_frame_id", map_frame_id_, static_cast<std::string>("map"));
-    pub_twist_cmd_ = nh_.advertise<geometry_msgs::Twist>(out_twist_topic, 1); // TODO: twist_timestampedに変更
-    sub_ref_path_ = nh_.subscribe(in_refpath_topic, 1, &MPCTracker::callback_reference_path, this);
-    sub_odom_ = nh_.subscribe(in_odom_topic, 1, &MPCTracker::callback_odom, this);
+    pub_twist_cmd_ = nh_.advertise<geometry_msgs::Twist>(out_twist_topic, 1);  // TODO: twist_timestampedに変更
+    sub_ref_path_  = nh_.subscribe(in_refpath_topic, 1, &MPCTracker::callback_reference_path, this);
+    sub_odom_      = nh_.subscribe(in_odom_topic, 1, &MPCTracker::callback_odom, this);
 
     /*Set publisher for visualization*/
-    mpc_simulator_ptr_ = std::make_unique<pathtrack_tools::MPCSimulator>(control_sampling_time_);
-    pub_predictive_pose_ = private_nh_.advertise<visualization_msgs::MarkerArray>("predictive_pose", 1);
+    mpc_simulator_ptr_    = std::make_unique<pathtrack_tools::MPCSimulator>(control_sampling_time_);
+    pub_predictive_pose_  = private_nh_.advertise<visualization_msgs::MarkerArray>("predictive_pose", 1);
     pub_calculation_time_ = private_nh_.advertise<std_msgs::Float32>("calculation_time", 1);
-    pub_F_norm_ = private_nh_.advertise<std_msgs::Float32>("F_norm", 1);
+    pub_F_norm_           = private_nh_.advertise<std_msgs::Float32>("F_norm", 1);
+
+    /*Service Client*/
+    service_control_trigger_ = nh_.advertiseService("follow_path_cmd", &MPCTracker::callback_control_trigger, this);
+    client_finish_goal_      = nh_.serviceClient<autoware_msgs::Trigger>("goal_reached_report");
 };
 
 MPCTracker::~MPCTracker()
@@ -64,11 +68,31 @@ MPCTracker::~MPCTracker()
     publish_twist(stop_twist);
 };
 
-void MPCTracker::timer_callback([[maybe_unused]] const ros::TimerEvent &te)
+void MPCTracker::timer_callback([[maybe_unused]] const ros::TimerEvent& te)
 {
-    stop_watch_.lap();
+    // TODO: ゴール判定 -> report
+    // const double dist_to_goal =
 
-    /*status check*/
+    /*Guard higher level planner permit*/
+    if (!is_permit_control_)
+    {
+        Twist zero_twist(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        ROS_INFO("[MPC] Waiting higher level planner permission for control");
+        publish_twist(zero_twist);
+        return;
+    }
+
+    /*Guard finishing goal*/
+    if (!is_finish_goal_)
+    {
+        Twist zero_twist(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        ROS_INFO("[MPC] Finishing goal");
+        publish_twist(zero_twist);
+
+        return;
+    }
+
+    /*Guard robot and reference path status*/
     const int path_size = course_manager_.get_path_size();
     if (path_size == 0 || !is_robot_state_ok_)
     {
@@ -77,20 +101,22 @@ void MPCTracker::timer_callback([[maybe_unused]] const ros::TimerEvent &te)
         return;
     }
 
+    stop_watch_.lap();
+
     /*coordinate convert from euclid to frenet-serret*/
     robot_status_.robot_pose_frenet_ = frenet_serret_converter_.global2frenet(course_manager_.get_mpc_course(), robot_status_.robot_pose_global_);
 
     /*Set state vector*/
-    const std::vector<double> state_vec{robot_status_.robot_pose_frenet_.x_f, robot_status_.robot_pose_frenet_.y_f, robot_status_.robot_pose_frenet_.yaw_f};
+    const std::vector<double> state_vec{ robot_status_.robot_pose_frenet_.x_f, robot_status_.robot_pose_frenet_.y_f, robot_status_.robot_pose_frenet_.yaw_f };
 
     /*Control input*/
-    double control_input_vec[MPC_INPUT::DIM] = {0.0};
+    double control_input_vec[MPC_INPUT::DIM] = { 0.0 };
 
     /*Control input series for visualization */
     std::array<std::vector<double>, MPC_INPUT::DIM> control_input_series;
 
     /*Solve NMPC by C/GMRES method*/
-    const double current_time = ros::Time::now().toSec(); // Used when first increasing the prediction horizon.
+    const double current_time = ros::Time::now().toSec();  // Used when first increasing the prediction horizon.
     if (!initial_solution_calculate_)
     {
         // The initial solution is calculated using Newton-GMRES method
@@ -100,7 +126,8 @@ void MPCTracker::timer_callback([[maybe_unused]] const ros::TimerEvent &te)
     else
     {
         // Update control_input_vec by C/GMRES method
-        const bool mpc_solver_error = nmpc_solver_ptr_->controlUpdate(current_time, state_vec, control_sampling_time_, path_curvature_, trajectory_speed_, drivable_width_, control_input_vec, &control_input_series);
+        const bool mpc_solver_error =
+            nmpc_solver_ptr_->controlUpdate(current_time, state_vec, control_sampling_time_, path_curvature_, trajectory_speed_, drivable_width_, control_input_vec, &control_input_series);
         if (mpc_solver_error)
         {
             ROS_ERROR("[MPC] Break down C/GMRES method.");
@@ -111,20 +138,29 @@ void MPCTracker::timer_callback([[maybe_unused]] const ros::TimerEvent &te)
 
     const double calculation_time = stop_watch_.lap();
 
+    /*NAN Guard*/
+    if (!std::isnan(control_input_vec[MPC_INPUT::TWIST_X]) || !std::isnan(control_input_vec[MPC_INPUT::ANGULAR_VEL_YAW]))
+    {
+        ROS_ERROR("[MPC] Calculate NAN control input");
+        publish_twist(prev_twist_cmd_);
+        return;
+    }
+
     /*Publish twist cmd*/
     Twist twist_cmd;
-    twist_cmd.x = control_input_vec[MPC_INPUT::TWIST_X];
-    twist_cmd.y = 0.0;
-    twist_cmd.z = 0.0;
-    twist_cmd.roll = 0.0;
+    twist_cmd.x     = control_input_vec[MPC_INPUT::TWIST_X];
+    twist_cmd.y     = 0.0;
+    twist_cmd.z     = 0.0;
+    twist_cmd.roll  = 0.0;
     twist_cmd.pitch = 0.0;
-    twist_cmd.yaw = control_input_vec[MPC_INPUT::ANGULAR_VEL_YAW];
+    twist_cmd.yaw   = control_input_vec[MPC_INPUT::ANGULAR_VEL_YAW];
     publish_twist(twist_cmd);
 
     prev_twist_cmd_ = twist_cmd;
 
     /*Visualization*/
-    const std::array<std::vector<double>, MPC_STATE_SPACE::DIM> predictive_poses = mpc_simulator_ptr_->reproduct_predivted_state(robot_status_.robot_pose_global_, control_input_series, control_sampling_time_);
+    const std::array<std::vector<double>, MPC_STATE_SPACE::DIM> predictive_poses =
+        mpc_simulator_ptr_->reproduct_predivted_state(robot_status_.robot_pose_global_, control_input_series, control_sampling_time_);
     const visualization_msgs::MarkerArray markers = convert_predictivestate2marker(predictive_poses, "mpc_predictive_pose", map_frame_id_, 0.99, 0.99, 0.99, 0.2);
     pub_predictive_pose_.publish(markers);
 
@@ -134,12 +170,12 @@ void MPCTracker::timer_callback([[maybe_unused]] const ros::TimerEvent &te)
 
     std_msgs::Float32 F_norm_msg;
     const double F_norm = nmpc_solver_ptr_->getErrorNorm(current_time, state_vec, path_curvature_, trajectory_speed_, drivable_width_);
-    F_norm_msg.data = static_cast<float>(F_norm);
+    F_norm_msg.data     = static_cast<float>(F_norm);
     pub_F_norm_.publish(F_norm_msg);
 };
 
 // Update robot pose when subscribe odometry msg
-void MPCTracker::callback_odom(const nav_msgs::Odometry &odom)
+void MPCTracker::callback_odom(const nav_msgs::Odometry& odom)
 {
     /*Get current pose via tf*/
     geometry_msgs::TransformStamped trans_form_stamped;
@@ -147,7 +183,7 @@ void MPCTracker::callback_odom(const nav_msgs::Odometry &odom)
     {
         trans_form_stamped = tf_buffer_.lookupTransform(map_frame_id_, robot_frame_id_, ros::Time(0));
     }
-    catch (const tf2::TransformException &ex)
+    catch (const tf2::TransformException& ex)
     {
         ROS_WARN("%s", ex.what());
         return;
@@ -156,24 +192,24 @@ void MPCTracker::callback_odom(const nav_msgs::Odometry &odom)
     /*update robot pose global*/
     robot_status_.robot_pose_global_.x = trans_form_stamped.transform.translation.x;
     robot_status_.robot_pose_global_.y = trans_form_stamped.transform.translation.y;
-    robot_status_.robot_pose_global_.z = trans_form_stamped.transform.translation.z; // not used now
+    robot_status_.robot_pose_global_.z = trans_form_stamped.transform.translation.z;  // not used now
     double roll, pitch, yaw;
     tf2::getEulerYPR(trans_form_stamped.transform.rotation, roll, pitch, yaw);
-    robot_status_.robot_pose_global_.roll = roll;   // not used now
-    robot_status_.robot_pose_global_.pitch = pitch; // not used now
-    robot_status_.robot_pose_global_.yaw = yaw;
+    robot_status_.robot_pose_global_.roll  = roll;   // not used now
+    robot_status_.robot_pose_global_.pitch = pitch;  // not used now
+    robot_status_.robot_pose_global_.yaw   = yaw;
 
     /*update robot twist*/
-    robot_status_.robot_twist_.x = odom.twist.twist.linear.x;
-    robot_status_.robot_twist_.y = odom.twist.twist.linear.y;
-    robot_status_.robot_twist_.z = odom.twist.twist.linear.z;     // not used now
-    robot_status_.robot_twist_.roll = odom.twist.twist.angular.x; // not used now
-    robot_status_.robot_twist_.pitch = odom.twist.twist.linear.y; // note used now
-    robot_status_.robot_twist_.yaw = odom.twist.twist.angular.z;
+    robot_status_.robot_twist_.x     = odom.twist.twist.linear.x;
+    robot_status_.robot_twist_.y     = odom.twist.twist.linear.y;
+    robot_status_.robot_twist_.z     = odom.twist.twist.linear.z;   // not used now
+    robot_status_.robot_twist_.roll  = odom.twist.twist.angular.x;  // not used now
+    robot_status_.robot_twist_.pitch = odom.twist.twist.linear.y;   // note used now
+    robot_status_.robot_twist_.yaw   = odom.twist.twist.angular.z;
 };
 
 // update reference_course in MPC and calculate curvature
-void MPCTracker::callback_reference_path(const nav_msgs::Path &path)
+void MPCTracker::callback_reference_path(const nav_msgs::Path& path)
 {
     if (path.poses.size() == 0)
     {
@@ -189,36 +225,46 @@ void MPCTracker::callback_reference_path(const nav_msgs::Path &path)
     ROS_INFO("[MPC] Path callback: receive path size = %d", course_manager_.get_mpc_course().size());
 };
 
-void MPCTracker::publish_twist(const Twist &twist_cmd) const
+bool MPCTracker::callback_control_trigger([[maybe_unused]] autoware_msgs::Trigger::Request& request, autoware_msgs::Trigger::Response& response)
+{
+    is_permit_control_ = true;
+    response.received  = true;
+    ROS_INFO("[MPC] Receive control permission from supervisor");
+
+    return true;
+}
+
+void MPCTracker::publish_twist(const Twist& twist_cmd) const
 {
     geometry_msgs::Twist twist;
-    twist.linear.x = twist_cmd.x;
-    twist.linear.y = 0.0;
-    twist.linear.z = 0.0;
+    twist.linear.x  = twist_cmd.x;
+    twist.linear.y  = 0.0;
+    twist.linear.z  = 0.0;
     twist.angular.x = 0.0;
     twist.angular.y = 0.0;
     twist.angular.z = twist_cmd.roll;
     pub_twist_cmd_.publish(twist);
 };
 
-visualization_msgs::MarkerArray MPCTracker::convert_predictivestate2marker(const std::array<std::vector<double>, MPC_STATE_SPACE::DIM> &predictive_state, const std::string &name_space, const std::string &frame_id, const double &r, const double &g, const double &b, const double &z) const
+visualization_msgs::MarkerArray MPCTracker::convert_predictivestate2marker(const std::array<std::vector<double>, MPC_STATE_SPACE::DIM>& predictive_state, const std::string& name_space,
+                                                                           const std::string& frame_id, const double& r, const double& g, const double& b, const double& z) const
 {
     visualization_msgs::MarkerArray marker_array;
 
     /*Add line*/
     visualization_msgs::Marker marker;
     marker.header.frame_id = frame_id;
-    marker.header.stamp = ros::Time();
-    marker.ns = name_space + "/line";
-    marker.id = 0;
-    marker.type = visualization_msgs::Marker::LINE_STRIP;
-    marker.scale.x = 0.15;
-    marker.scale.y = 0.3;
-    marker.scale.z = 0.3;
-    marker.color.a = 0.9;
-    marker.color.r = r;
-    marker.color.g = g;
-    marker.color.b = b;
+    marker.header.stamp    = ros::Time();
+    marker.ns              = name_space + "/line";
+    marker.id              = 0;
+    marker.type            = visualization_msgs::Marker::LINE_STRIP;
+    marker.scale.x         = 0.15;
+    marker.scale.y         = 0.3;
+    marker.scale.z         = 0.3;
+    marker.color.a         = 0.9;
+    marker.color.r         = r;
+    marker.color.g         = g;
+    marker.color.b         = b;
     for (size_t i = 0; i < predictive_state.at(0).size(); i++)
     {
         geometry_msgs::Point p;
@@ -231,22 +277,22 @@ visualization_msgs::MarkerArray MPCTracker::convert_predictivestate2marker(const
     /*Add pose as arrow*/
     visualization_msgs::Marker marker_poses;
     marker_poses.header.frame_id = frame_id;
-    marker_poses.header.stamp = ros::Time();
-    marker_poses.ns = name_space + "/poses";
-    marker_poses.lifetime = ros::Duration(0.5);
-    marker_poses.type = visualization_msgs::Marker::ARROW;
-    marker_poses.action = visualization_msgs::Marker::ADD;
-    marker_poses.scale.x = 0.2;
-    marker_poses.scale.y = 0.1;
-    marker_poses.scale.z = 0.2;
-    marker_poses.color.a = 0.99; // Don't forget to set the alpha!
-    marker_poses.color.r = r;
-    marker_poses.color.g = g;
-    marker_poses.color.b = b;
+    marker_poses.header.stamp    = ros::Time();
+    marker_poses.ns              = name_space + "/poses";
+    marker_poses.lifetime        = ros::Duration(0.5);
+    marker_poses.type            = visualization_msgs::Marker::ARROW;
+    marker_poses.action          = visualization_msgs::Marker::ADD;
+    marker_poses.scale.x         = 0.2;
+    marker_poses.scale.y         = 0.1;
+    marker_poses.scale.z         = 0.2;
+    marker_poses.color.a         = 0.99;  // Don't forget to set the alpha!
+    marker_poses.color.r         = r;
+    marker_poses.color.g         = g;
+    marker_poses.color.b         = b;
 
     for (size_t i = 0; i < predictive_state.at(0).size(); i++)
     {
-        marker_poses.id = i;
+        marker_poses.id              = i;
         marker_poses.pose.position.x = predictive_state.at(MPC_STATE_SPACE::X_F).at(i);
         marker_poses.pose.position.y = predictive_state.at(MPC_STATE_SPACE::Y_F).at(i);
         marker_poses.pose.position.z = z;
@@ -257,4 +303,27 @@ visualization_msgs::MarkerArray MPCTracker::convert_predictivestate2marker(const
     }
 
     return marker_array;
+}
+
+void MPCTracker::report_reached_goal()
+{
+    /*flag true*/
+    is_finish_goal_ = true;
+
+    /*Report to supervisor*/
+    autoware_msgs::Trigger goal_reached_srv_call;
+    goal_reached_srv_call.request.trigger = true;
+    if (client_finish_goal_.call(goal_reached_srv_call))
+    {
+        bool reset_flag = goal_reached_srv_call.response.received;
+        if (reset_flag == true)
+        {
+            ROS_INFO("[MPC] Goal reached completely");
+            is_permit_control_ = false;
+        }
+    }
+    else
+    {
+        ROS_ERROR("[MPC] Goal Communication to job supervisor FAILED");
+    }
 }
