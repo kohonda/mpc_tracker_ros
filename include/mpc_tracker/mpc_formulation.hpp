@@ -21,10 +21,12 @@ namespace cgmres
         static constexpr int dim_control_input_ = MPC_INPUT::DIM;
         static constexpr int dim_constraints_ = 0;
 
-        std::array<double, dim_state_> q_ = {0.0, 1.0, 1.0};
-        std::array<double, dim_state_> q_terminal_ = {0.0, 1.0, 1.0};
-        std::array<double, dim_state_> x_ref_ = {0.0, 0.0, 0.0};
-        std::array<double, dim_control_input_> r_ = {1.0, 1.0};
+        std::array<double, dim_state_> q_ = {0.0, 0.1, 0.1, 0.01};
+        std::array<double, dim_state_> q_terminal_ = {0.0, 0.1, 0.1, 0.0};
+        std::array<double, dim_state_> x_ref_ = {0.0, 0.0, 0.0, 0.0};
+        std::array<double, dim_control_input_> r_ = {0.1, 0.1};
+
+        const double rho_g_ = 0.1;
 
     public:
         // Computes the state equation f(t, x, u).
@@ -32,8 +34,9 @@ namespace cgmres
         // x : state vector
         // u : control input vector
         // f : the value of f(t, x, u)
-        void stateFunc(const double t, const std::vector<double> &x, const double *u, std::function<double(double)> &traj_curvature, std::function<double(double)> &traj_speed,
-                       std::function<double(double)> &drivable_width, std::vector<double> &dx) const;
+        void
+        stateFunc(const double t, const std::vector<double> &x, const double *u, std::function<double(double)> &traj_curvature, std::function<double(double)> &traj_speed,
+                  std::function<double(double)> &drivable_width, std::vector<double> &dx) const;
 
         // Computes the partial derivative of terminal cost with respect to state,
         // i.e., dphi/dx(t, x).

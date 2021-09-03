@@ -23,7 +23,8 @@ MPCTracker::MPCTracker() : nh_(""), private_nh_("~"), tf_listener_(tf_buffer_), 
     private_nh_.param("terminal_weight_lat_error", mpc_param_.q_terminal_.at(MPC_STATE_SPACE::Y_F), static_cast<double>(1.0));
     private_nh_.param("terminal_weight_yaw_error", mpc_param_.q_terminal_.at(MPC_STATE_SPACE::YAW_F), static_cast<double>(1.0));
     private_nh_.param("weight_input_angular_yaw", mpc_param_.r_.at(MPC_INPUT::ANGULAR_VEL_YAW), static_cast<double>(1.0));
-    private_nh_.param("weight_input_twist_x", mpc_param_.r_.at(MPC_INPUT::TWIST_X), static_cast<double>(1.0));
+    private_nh_.param("weight_input_accel", mpc_param_.r_.at(MPC_INPUT::ACCEL), static_cast<double>(1.0));
+    // TODO: add twist xの重み
     // TODO: max, min of input
 
     /*Initialize C/GMRES Solver */
@@ -111,9 +112,17 @@ void MPCTracker::timer_callback([[maybe_unused]] const ros::TimerEvent &te)
 
     const double calculation_time = stop_watch_.lap();
 
+    /*NAN Guard*/
+    if (!std::isnan(control_input_vec[MPC_INPUT::ACCEL]) || !std::isnan(control_input_vec[MPC_INPUT::ANGULAR_VEL_YAW]))
+    {
+        ROS_ERROR("[MPC] Calculate NAN control input");
+        publish_twist(prev_twist_cmd_);
+        return;
+    }
+
     /*Publish twist cmd*/
     Twist twist_cmd;
-    twist_cmd.x = control_input_vec[MPC_INPUT::TWIST_X];
+    twist_cmd.x = robot_status_.robot_twist_.x + control_input_vec[MPC_INPUT::ACCEL] * control_sampling_time_;
     twist_cmd.y = 0.0;
     twist_cmd.z = 0.0;
     twist_cmd.roll = 0.0;
@@ -124,7 +133,7 @@ void MPCTracker::timer_callback([[maybe_unused]] const ros::TimerEvent &te)
     prev_twist_cmd_ = twist_cmd;
 
     /*Visualization*/
-    const std::array<std::vector<double>, MPC_STATE_SPACE::DIM> predictive_poses = mpc_simulator_ptr_->reproduct_predivted_state(robot_status_.robot_pose_global_, control_input_series, control_sampling_time_);
+    const std::array<std::vector<double>, MPC_STATE_SPACE::DIM> predictive_poses = mpc_simulator_ptr_->reproduct_predivted_state(robot_status_.robot_pose_global_, robot_status_.robot_twist_, control_input_series, control_sampling_time_);
     const visualization_msgs::MarkerArray markers = convert_predictivestate2marker(predictive_poses, "mpc_predictive_pose", map_frame_id_, 0.99, 0.99, 0.99, 0.2);
     pub_predictive_pose_.publish(markers);
 

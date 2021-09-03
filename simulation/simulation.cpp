@@ -31,22 +31,26 @@ int main(int argc, char *argv[])
 
     // Observed info of robot pose in global coordinate
     Pose ego_pose_global;
+    Twist robot_twist;
 
     // Initialize pose of robot
     ego_pose_global.x = 0.01;
-    ego_pose_global.y = 0.0;
+    ego_pose_global.y = 0.1;
     ego_pose_global.z = 0.0;
     ego_pose_global.roll = 0.0;
     ego_pose_global.pitch = 0.0;
     ego_pose_global.yaw = 0.0;
+    robot_twist.x = 0.0;
+    robot_twist.y = 0.0;
+    robot_twist.yaw = 0.0;
 
     // Set the initial guess of the control input
     double solution_initial_guess[MPC_INPUT::DIM];
     solution_initial_guess[MPC_INPUT::ANGULAR_VEL_YAW] = 0.01;
-    solution_initial_guess[MPC_INPUT::TWIST_X] = 0.01;
+    solution_initial_guess[MPC_INPUT::ACCEL] = 0.01;
 
     // Initialize the solution of the C/GMRES method.
-    nmpc_solver.setParametersForInitialization(solution_initial_guess, 1e-06, 50);
+    nmpc_solver.setParametersForInitialization(solution_initial_guess, 1e-06, 100);
 
     // Set Driving course
     pathtrack_tools::CourseManager course_manager;
@@ -78,7 +82,8 @@ int main(int argc, char *argv[])
                  << "y_g"
                  << "yaw_g"
                  << "twist_x"
-                 << "twist_yaw"
+                 << "input.accel"
+                 << "input.twist_yaw"
                  << "x_f"
                  << "y_f"
                  << "yaw_f"
@@ -104,6 +109,7 @@ int main(int argc, char *argv[])
         current_state_vec_frenet.at(MPC_STATE_SPACE::X_F) = ego_pose_frenet.x_f;
         current_state_vec_frenet.at(MPC_STATE_SPACE::Y_F) = ego_pose_frenet.y_f;
         current_state_vec_frenet.at(MPC_STATE_SPACE::YAW_F) = ego_pose_frenet.yaw_f;
+        current_state_vec_frenet.at(MPC_STATE_SPACE::TWIST_X) = robot_twist.x;
 
         std::array<std::vector<double>, MPC_INPUT::DIM> control_input_series;
         // Solve by C/GMRES
@@ -134,7 +140,8 @@ int main(int argc, char *argv[])
                      << ego_pose_global.x
                      << ego_pose_global.y
                      << ego_pose_global.yaw
-                     << control_input_vec[MPC_INPUT::TWIST_X]
+                     << robot_twist.x
+                     << control_input_vec[MPC_INPUT::ACCEL]
                      << control_input_vec[MPC_INPUT::ANGULAR_VEL_YAW]
                      << ego_pose_frenet.x_f
                      << ego_pose_frenet.y_f
@@ -151,7 +158,7 @@ int main(int argc, char *argv[])
         if (static_cast<int>(current_time) % 1 == 0)
         {
             // get predictive state series
-            const std::array<std::vector<double>, MPC_STATE_SPACE::DIM> predicted_series = mpc_simulator.reproduct_predivted_state(ego_pose_global, control_input_series, sampling_time);
+            const std::array<std::vector<double>, MPC_STATE_SPACE::DIM> predicted_series = mpc_simulator.reproduct_predivted_state(ego_pose_global, robot_twist, control_input_series, sampling_time);
 
             // clear previous plot
             matplotlibcpp::clf();
@@ -182,9 +189,10 @@ int main(int argc, char *argv[])
         }
 
         // Pose update by simulator
-        const auto updated_ego_pose_global = mpc_simulator.update_ego_state(current_time, ego_pose_global, control_input_vec, sampling_time);
+        const auto [updated_ego_pose_global, updated_robot_twist] = mpc_simulator.update_ego_state(current_time, ego_pose_global, robot_twist, control_input_vec, sampling_time);
 
         ego_pose_global = updated_ego_pose_global;
+        robot_twist = updated_robot_twist;
     }
 
     std::cout << "End Simulation" << std::endl;

@@ -23,4 +23,4 @@ weight_yaw_error: 1.0 # Weight for yaw error from reference path in stage cost
 terminal_weight_lat_error: 1.0 # Weight for lateral error from reference path in terminal cost
 terminal_weight_yaw_error: 1.0 # Weight for yaw error from reference path in terminal cost
 weight_input_angular_yaw: 1.0 # Weight for angular velocity input
-weight_input_twist_x: 1.0 # Weight for forward/backward velocity input
+weight_input_accel: 1.0 # Weight for forward/backward velocity input
