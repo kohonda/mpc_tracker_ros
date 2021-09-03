@@ -26,7 +26,7 @@ int main(int argc, char *argv[])
     const int N = 10;
     const double finite_distance_increment = 0.002;
     const double zeta = 10;
-    const int kmax = 100;
+    const int kmax = 10;
     cgmres::ContinuationGMRES nmpc_solver(Tf, alpha, N, finite_distance_increment, zeta, kmax);
 
     // Observed info of robot pose in global coordinate
