@@ -94,6 +94,7 @@ namespace pathtrack_tools
       const int curvature_smoothing_num_ = 10;       //!< @brief Smoothing value for curvature calculation
       const double max_curvature_change_rate_ = 1.0; //!< @brief Saturate value for curvature change rate [1/m^2]
       const double speed_reduction_rate_ = 0.1;      //!< @brief Reduce the speed reference based on the rate of curvature change; v_ref' = v_ref * exp (-speed_reduction_rate * curvature_rate^2)
+      const double decelation_for_stop_ = 0.3;       //!< @brief Reduce the speed reference for stopping; v_ref'  = v_ref * (1 - exp(-decelation_for_stop * (x_goal -x_f))), recommend the same value as a a_min in MPC formulation
 
       // Parameters for lookup table (xf) -> (nearest index)
       std::unordered_map<double, int> hash_xf2index_; // Hash that connects x_f to the nearest index
@@ -118,6 +119,8 @@ namespace pathtrack_tools
       std::vector<double> calc_path_curvature(const int &smoothing_num, const MPCCourse &mpc_course) const;
 
       double calc_distance(const std::array<double, 2> &p1, const std::array<double, 2> &p2) const;
+
+      void deceleration_for_stop(const std::vector<double> &accumulated_path_length, std::vector<double> *ref_speed);
 
       void filtering_based_curvature_rate(const std::vector<double> &accumulated_path_length, std::vector<double> *path_curvature, std::vector<double> *ref_speed);
 

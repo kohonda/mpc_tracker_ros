@@ -172,8 +172,8 @@ int main(int argc, char *argv[])
             ego_yaw_y[1] = ego_pose_global.y + rod_length * sin(ego_pose_global.yaw);
 
             matplotlibcpp::named_plot("Reference path", course_manager.get_mpc_course().x, course_manager.get_mpc_course().y, "g:");
-            matplotlibcpp::named_plot("Ego car global position", ego_pose_x, ego_pose_y, "or");
-            matplotlibcpp::plot(ego_yaw_x, ego_yaw_y, "r");
+            matplotlibcpp::named_plot("Robot position", ego_pose_x, ego_pose_y, "or");
+            // matplotlibcpp::plot(ego_yaw_x, ego_yaw_y, "r");
             matplotlibcpp::named_plot("Planned path", predicted_series[MPC_STATE_SPACE::X_F], predicted_series[MPC_STATE_SPACE::Y_F], "b-");
 
             matplotlibcpp::xlim(ego_pose_global.x - 5, ego_pose_global.x + 5);

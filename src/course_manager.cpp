@@ -72,6 +72,9 @@ namespace pathtrack_tools
         // set path yaw_g for using frenet2global
         set_path_yaw(&mpc_course_);
 
+        // Arrange speed reference for stop at terminal waypoint
+        deceleration_for_stop(mpc_course_.accumulated_path_length, &mpc_course_.speed);
+
         // Filtering curvature and reference_speed based on curvature change rate
         filtering_based_curvature_rate(mpc_course_.accumulated_path_length, &mpc_course_.curvature, &mpc_course_.speed);
 
@@ -103,6 +106,9 @@ namespace pathtrack_tools
 
         // set path yaw_g for using frent2global
         set_path_yaw(&mpc_course_);
+
+        // Arrange speed reference for stop at terminal waypoint
+        deceleration_for_stop(mpc_course_.accumulated_path_length, &mpc_course_.speed);
 
         // Filtering curvature and reference_speed based on curvature change rate
         filtering_based_curvature_rate(mpc_course_.accumulated_path_length, &mpc_course_.curvature, &mpc_course_.speed);
@@ -205,6 +211,16 @@ namespace pathtrack_tools
     double CourseManager::calc_distance(const std::array<double, 2> &p1, const std::array<double, 2> &p2) const
     {
         return std::hypot(p1[0] - p2[0], p1[1] - p2[1]);
+    }
+
+    void CourseManager::deceleration_for_stop(const std::vector<double> &accumulated_path_length, std::vector<double> *ref_speed)
+    {
+        const double final_x_f = accumulated_path_length.back();
+        for (size_t i = 0; i < ref_speed->size(); i++)
+        {
+            // const double delta_xf = accumulated_path_length[i] - accumulated_path_length[i - 1];
+            ref_speed->at(i) = std::max(0.0, ref_speed->at(i) * (1 - std::exp(-decelation_for_stop_ * (final_x_f - accumulated_path_length[i]))));
+        }
     }
 
     // Saturate the rate of curvature change when curvature_change_rate > max_curvature_change_rate
