@@ -21,7 +21,7 @@ namespace cgmres
         const double curvature = traj_curvature(x[MPC_STATE_SPACE::X_F]);
         const double ref_speed = traj_speed(x[MPC_STATE_SPACE::X_F]);
         // const double ref_speed_filtered = std::min(ref_speed, std::sqrt(a_max_ / std::max(std::abs(curvature), 0.01)));
-        const double ref_speed_filtered = ref_speed * std::exp(-std::abs(curvature));
+        const double ref_speed_filtered = ref_speed * std::exp(-gamma_ * curvature * curvature);
         // std::cout << ref_speed_filtered << std::endl;
 
         phix[MPC_STATE_SPACE::X_F] = (1.0 / 2.0) * q_terminal_[MPC_STATE_SPACE::X_F] * (2 * x[MPC_STATE_SPACE::X_F] - 2 * x_ref_[MPC_STATE_SPACE::X_F]);
@@ -36,7 +36,7 @@ namespace cgmres
         const double curvature = traj_curvature(x[MPC_STATE_SPACE::X_F]);
         const double ref_speed = traj_speed(x[MPC_STATE_SPACE::X_F]);
         // const double ref_speed_filtered = std::min(ref_speed, std::sqrt(a_max_ / std::max(std::abs(curvature), 0.01)));
-        const double ref_speed_filtered = ref_speed * std::exp(-std::abs(curvature));
+        const double ref_speed_filtered = ref_speed * std::exp(-gamma_ * curvature * curvature);
 
         hx[MPC_STATE_SPACE::X_F] = (1.0 / 2.0) * q_[MPC_STATE_SPACE::X_F] * (2 * x[MPC_STATE_SPACE::X_F] - 2 * x_ref_[MPC_STATE_SPACE::X_F]);
         hx[MPC_STATE_SPACE::Y_F] = -pow(curvature, 2) * lmd[MPC_STATE_SPACE::YAW_F] * x[MPC_STATE_SPACE::TWIST_X] * cos(x[MPC_STATE_SPACE::YAW_F]) / pow(-curvature * x[MPC_STATE_SPACE::Y_F] + 1, 2) + curvature * lmd[MPC_STATE_SPACE::X_F] * x[MPC_STATE_SPACE::TWIST_X] * cos(x[MPC_STATE_SPACE::YAW_F]) / pow(-curvature * x[MPC_STATE_SPACE::Y_F] + 1, 2) + (1.0 / 2.0) * q_[MPC_STATE_SPACE::Y_F] * (2 * x[MPC_STATE_SPACE::Y_F] - 2 * x_ref_[MPC_STATE_SPACE::Y_F]);

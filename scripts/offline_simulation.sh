@@ -14,8 +14,8 @@ OFFLINE_SIMULATION=${WS_DIR}"/install/mpc_tracker/lib/mpc_tracker/simulation"
 # INPUT_REFERENCE_PATH=${PROJECT_BASE_DIR}"/simulation/reference_path/sinwave_05.csv"
 # INPUT_REFERENCE_PATH=${PROJECT_BASE_DIR}"/simulation/reference_path/sinwave_075.csv"
 # TODO: ↓は走りきることが出来ない．車速とヨーの同時最適化が良くないのか？もしくはcgmresのパラメータチューニング必要．車速追従への評価関数があまりよくないね
-# INPUT_REFERENCE_PATH=${PROJECT_BASE_DIR}"/simulation/reference_path/sinwave_1.csv
-INPUT_REFERENCE_PATH=${PROJECT_BASE_DIR}"/simulation/reference_path/curv_90deg.csv"
+INPUT_REFERENCE_PATH=${PROJECT_BASE_DIR}"/simulation/reference_path/sinwave_1.csv"
+# INPUT_REFERENCE_PATH=${PROJECT_BASE_DIR}"/simulation/reference_path/curv_90deg.csv"
 # INPUT_REFERENCE_PATH=${PROJECT_BASE_DIR}"/simulation/reference_path/step_1m.csv"
 
 OUTPUT_RESULT=${PROJECT_BASE_DIR}"/simulation/simulation_result/result.csv"

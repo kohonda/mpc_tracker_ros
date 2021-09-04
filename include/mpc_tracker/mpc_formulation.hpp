@@ -22,13 +22,14 @@ namespace cgmres
         static constexpr int dim_constraints_ = 0;
 
         std::array<double, dim_state_> q_ = {0.0, 0.1, 0.1, 0.1};
-        std::array<double, dim_state_> q_terminal_ = {0.0, 0.1, 0.1, 0.0};
+        std::array<double, dim_state_> q_terminal_ = {0.0, 0.1, 0.0, 0.0};
         std::array<double, dim_state_> x_ref_ = {0.0, 0.0, 0.0, 0.0};
-        std::array<double, dim_control_input_> r_ = {0.1, 0.1};
+        std::array<double, dim_control_input_> r_ = {0.01, 0.01};
 
         const double rho_g_ = 0.1;
         const double a_max_ = 1.0;
         const double a_min_ = -1.0;
+        const double gamma_ = 3.0;
 
     public:
         // Computes the state equation f(t, x, u).
