@@ -89,9 +89,16 @@ namespace pathtrack_tools
       double get_drivable_width(const double &pose_x_f);
 
    private:
-      MPCCourse mpc_course_;                   //!< @brief driving course interface using in MPC
-      const int curvature_smoothing_num_;      //!< @brief Smoothing value for curvature calculation
-      const double max_curvature_change_rate_; //!< @brief Saturate value for curvature change rate [1/m^2]
+      MPCCourse mpc_course_; //!< @brief driving course interface using in MPC
+      // Parameters for path smoothing and filtering
+      const int curvature_smoothing_num_ = 10;       //!< @brief Smoothing value for curvature calculation
+      const double max_curvature_change_rate_ = 1.0; //!< @brief Saturate value for curvature change rate [1/m^2]
+      const double speed_reduction_rate_ = 0.1;      //!< @brief Reduce the speed reference based on the rate of curvature change; v_ref' = v_ref * exp (-speed_reduction_rate * curvature_rate^2)
+
+      // Parameters for lookup table (xf) -> (nearest index)
+      std::unordered_map<double, int> hash_xf2index_; // Hash that connects x_f to the nearest index
+      const double hash_resolution_ = 0.01;           // resolution of x_f [m]
+      const double redundant_xf_ = 5.0;               // Reserve the lookup table for the extra -redundant_xf[m] from the initial value of mpc_course.
 
       // variables for linear interpolate
       int nearest_index_;           // Nearest waypoint index
@@ -99,11 +106,6 @@ namespace pathtrack_tools
       int second_nearest_index_;    // second nearest reference pointのindex
       double second_nearest_ratio_; // The internal fraction of second nearest_index
       double current_pose_x_f_;     // Position of vehicle in the same prediction step
-
-      // valuables for lookup table (xf) -> (nearest index)
-      std::unordered_map<double, int> hash_xf2index_; // Hash that connects x_f to the nearest index
-      const double hash_resolution_;                  // resolution of x_f [m]
-      const double redundant_xf_;                     // Reserve the lookup table for the extra -redudant_xf[m] from the initial value of mpc_course.
 
       void set_accumulated_path_length(const double &offset, MPCCourse *mpc_course);
 
@@ -117,7 +119,7 @@ namespace pathtrack_tools
 
       double calc_distance(const std::array<double, 2> &p1, const std::array<double, 2> &p2) const;
 
-      void filtering_path_curvature(const std::vector<double> &accumulated_path_length, std::vector<double> *path_curvature);
+      void filtering_based_curvature_rate(const std::vector<double> &accumulated_path_length, std::vector<double> *path_curvature, std::vector<double> *ref_speed);
 
       void set_hash_xf2index(const MPCCourse &mpc_course, std::unordered_map<double, int> *hash_xf2index);
 
