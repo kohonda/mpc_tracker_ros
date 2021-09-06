@@ -5,12 +5,13 @@ class EgoState:
     def __init__(self):
         
         # ============= User setting =====================
-        self.DIM_STATE = 3
+        self.DIM_STATE = 4
         self.x_f = sympy.Symbol('x[MPC_STATE_SPACE::X_F]')
         self.y_f = sympy.Symbol('x[MPC_STATE_SPACE::Y_F]')
         self.yaw_f = sympy.Symbol('x[MPC_STATE_SPACE::YAW_F]')
+        self.twist_x = sympy.Symbol('x[MPC_STATE_SPACE::TWIST_X]')
         
-        self.state_dict = {'x_f':self.x_f, 'y_f':self.y_f, 'yaw_f':self.yaw_f}
+        self.state_dict = {'x_f':self.x_f, 'y_f':self.y_f, 'yaw_f':self.yaw_f, 'twist_x':self.twist_x}
         # ============= User setting =====================
         assert self.DIM_STATE > 0
         assert self.DIM_STATE == len(self.state_dict)
@@ -55,9 +56,9 @@ class EgoInput:
         # ======== User setting ===============
         self.DIM_INPUT = 2
         self.twist_yaw = sympy.Symbol('u[MPC_INPUT::ANGULAR_VEL_YAW]')
-        self.twist_x = sympy.Symbol('u[MPC_INPUT::TWIST_X]')
+        self.accel = sympy.Symbol('u[MPC_INPUT::ACCEL]')
 
-        self.input_dict = {'twist_yaw':self.twist_yaw, 'twist_x':self.twist_x}
+        self.input_dict = {'twist_yaw':self.twist_yaw, 'accel':self.accel}
         # ======== User setting ===============
         
         assert self.DIM_INPUT > 0

@@ -2,7 +2,19 @@
 
 namespace pathtrack_tools
 {
-    CourseManager::CourseManager(/* args */) : curvature_smoothing_num_{10}, max_curvature_change_rate_{0.1}, hash_resolution_{0.01}, redundant_xf_{5.0}
+
+    CourseManager::CourseManager()
+    {
+        nearest_index_ = 0;
+        nearest_ratio_ = 1.0;
+        second_nearest_index_ = 0;
+        second_nearest_ratio_ = 0.0;
+        current_pose_x_f_ = 0.0;
+        hash_xf2index_ = {{0.0, 0}};
+    }
+
+    CourseManager::CourseManager(const int curvature_smoothing_num, const double max_curvature_change_rate, const double speed_reduction_rate, const double deceleration_rate_for_stop)
+        : curvature_smoothing_num_{curvature_smoothing_num}, max_curvature_change_rate_{max_curvature_change_rate}, speed_reduction_rate_{speed_reduction_rate}, deceleration_rate_for_stop_{deceleration_rate_for_stop}
     {
         nearest_index_ = 0;
         nearest_ratio_ = 1.0;
@@ -76,34 +88,31 @@ namespace pathtrack_tools
         // set curvature, which is nearly equal to x_f
         set_path_curvature(curvature_smoothing_num_, &mpc_course_);
 
-        // set path yaw_g for using global2frenet
+        // set path yaw_g for using frenet2global
         set_path_yaw(&mpc_course_);
 
-        // Smooth the reference path when its curvature change rate is large.
-        filtering_path_curvature(mpc_course_.accumulated_path_length, &mpc_course_.curvature);
+        // Arrange speed reference for stop at terminal waypoint
+        deceleration_for_stop(mpc_course_.accumulated_path_length, &mpc_course_.speed);
+
+        // Filtering curvature and reference_speed based on curvature change rate
+        filtering_based_curvature_rate(mpc_course_.accumulated_path_length, &mpc_course_.curvature, &mpc_course_.speed);
 
         // set lookup table covert from xf to nearest index
         set_hash_xf2index(mpc_course_, &hash_xf2index_);
     }
 
-    void CourseManager::set_course_from_nav_msgs(const nav_msgs::Path &path, const double &reference_speed, const size_t &zero_speed_points_around_goal)
+    void CourseManager::set_course_from_nav_msgs(const nav_msgs::Path &path, const double &reference_speed)
     {
         mpc_course_.clear();
 
         /*convert nav_msgs::path to mpc_course*/
-        for (const auto &pose : path.poses)
+        mpc_course_.resize(path.poses.size());
+        for (size_t i = 0; i < path.poses.size(); i++)
         {
-            mpc_course_.x.push_back(pose.pose.position.x);
-            mpc_course_.y.push_back(pose.pose.position.y);
-            mpc_course_.z.push_back(pose.pose.position.z);
-            mpc_course_.yaw.push_back(tf2::getYaw(pose.pose.orientation));
-            mpc_course_.speed.push_back(reference_speed);
-        }
-
-        /*Set zero reference speed at final reference point*/
-        for (size_t i = 0; i < zero_speed_points_around_goal; i++)
-        {
-            mpc_course_.speed.at(mpc_course_.size() - i - 1) = 0.0;
+            mpc_course_.x.at(i) = path.poses.at(i).pose.position.x;
+            mpc_course_.y.at(i) = path.poses.at(i).pose.position.y;
+            mpc_course_.yaw.at(i) = tf2::getYaw(path.poses.at(i).pose.orientation);
+            mpc_course_.speed.at(i) = reference_speed;
         }
 
         // set accumulated path length, which is nearly equal to x_f
@@ -114,11 +123,14 @@ namespace pathtrack_tools
         // set curvature, which is nearly equal to x_f
         set_path_curvature(curvature_smoothing_num_, &mpc_course_);
 
-        // set path yaw_g for using global2frenet
+        // set path yaw_g for using frent2global
         set_path_yaw(&mpc_course_);
 
-        // Smooth the reference path when its curvature change rate is large.
-        filtering_path_curvature(mpc_course_.accumulated_path_length, &mpc_course_.curvature);
+        // Arrange speed reference for stop at terminal waypoint
+        deceleration_for_stop(mpc_course_.accumulated_path_length, &mpc_course_.speed);
+
+        // Filtering curvature and reference_speed based on curvature change rate
+        filtering_based_curvature_rate(mpc_course_.accumulated_path_length, &mpc_course_.curvature, &mpc_course_.speed);
 
         // set lookup table covert from xf to nearest index
         set_hash_xf2index(mpc_course_, &hash_xf2index_);
@@ -205,7 +217,7 @@ namespace pathtrack_tools
             curvature_vec[i] = curvature;
         }
 
-        // Caluculate the curvature except the edge
+        // Calculate the curvature except the edge
         for (int i = 0; i < std::min(path_size, L); i++)
         {
             curvature_vec[i] = curvature_vec[std::min(L, path_size - 1)];
@@ -220,8 +232,18 @@ namespace pathtrack_tools
         return std::hypot(p1[0] - p2[0], p1[1] - p2[1]);
     }
 
+    void CourseManager::deceleration_for_stop(const std::vector<double> &accumulated_path_length, std::vector<double> *ref_speed)
+    {
+        const double final_x_f = accumulated_path_length.back();
+        for (size_t i = 0; i < ref_speed->size(); i++)
+        {
+            // const double delta_xf = accumulated_path_length[i] - accumulated_path_length[i - 1];
+            ref_speed->at(i) = std::max(0.0, ref_speed->at(i) * (1 - std::exp(-deceleration_rate_for_stop_ * (final_x_f - accumulated_path_length[i]))));
+        }
+    }
+
     // Saturate the rate of curvature change when curvature_change_rate > max_curvature_change_rate
-    void CourseManager::filtering_path_curvature(const std::vector<double> &accumulated_path_length, std::vector<double> *path_curvature)
+    void CourseManager::filtering_based_curvature_rate(const std::vector<double> &accumulated_path_length, std::vector<double> *path_curvature, std::vector<double> *ref_speed)
     {
         bool is_filtered = false;
 
@@ -234,12 +256,17 @@ namespace pathtrack_tools
             const double delta_curvature = path_curvature->at(i) - path_curvature->at(i - 1);
             const double curvature_change_rate = delta_curvature / std::max(0.00001, delta_xf);
 
+            // filtering path curvature
             if (std::abs(curvature_change_rate) > max_curvature_change_rate_)
             {
                 path_curvature->at(i) = path_curvature->at(i - 1) + sign(delta_curvature) * max_curvature_change_rate_ * delta_xf;
 
                 is_filtered = true;
             }
+
+            // filtering reference speed
+            // v_ref_filtered = v_ref * exp (-speed_reduction_rate * curvature_rate^2)
+            ref_speed->at(i) = ref_speed->at(i) * std::exp(-speed_reduction_rate_ * curvature_change_rate * curvature_change_rate);
         }
         if (is_filtered)
         {

@@ -46,7 +46,7 @@ namespace pathtrack_tools
      * @param sampling_time
      * @return std::tuple<Pose, Twist>
      */
-        Pose update_ego_state(const double current_time, const Pose &current_ego_pose_global, const double *control_input_vec, const double sampling_time);
+        std::pair<Pose, Twist> update_ego_state(const double current_time, const Pose &current_ego_pose_global, const Twist &ego_twist, const double *control_input_vec, const double sampling_time);
 
         /**
      * @brief Reproduct predicted state in MPC from calculated control input series
@@ -57,7 +57,7 @@ namespace pathtrack_tools
      * @param sampling_time
      * @return std::array<std::vector<double>, MPC_STATE_SPACE::DIM>
      */
-        std::array<std::vector<double>, MPC_STATE_SPACE::DIM> reproduct_predivted_state(const Pose &current_ego_pose_global, const std::array<std::vector<double>, MPC_INPUT::DIM> &control_input_series, const double &sampling_time) const;
+        std::array<std::vector<double>, MPC_STATE_SPACE::DIM> reproduct_predivted_state(const Pose &current_ego_pose_global, const Twist &current_robot_twist, const std::array<std::vector<double>, MPC_INPUT::DIM> &control_input_series, const double &sampling_time) const;
 
     private:
         std::queue<double> accel_input_queue_; // buffer for accel input to describe time delay
@@ -65,8 +65,8 @@ namespace pathtrack_tools
         const double accel_delay_time_ = 0.01; // time delay for accel input [s]
         const double angle_delay_time_ = 0.01; // time delay for tire angle input [s]
 
-        std::array<double, MPC_STATE_SPACE::DIM> ego_pose_to_state(const Pose &ego_pose) const;
-        Pose ego_state_to_pose(const std::array<double, MPC_STATE_SPACE::DIM> &ego_state) const;
+        std::array<double, MPC_STATE_SPACE::DIM> ego_pose_to_state(const Pose &ego_pose, const Twist &twist) const;
+        std::pair<Pose, Twist> ego_state_to_pose(const std::array<double, MPC_STATE_SPACE::DIM> &ego_state) const;
 
         // TODO : vectorには対応していないので，vectorのとき様に別の関数を用意する必要があるね
         /**

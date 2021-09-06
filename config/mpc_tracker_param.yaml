@@ -1,15 +1,20 @@
-# -- ros system --
+# -- ROS system --
 out_twist_topic: twist_cmd
 in_refpath_topic: reference_path
 in_odom_topic: odom
 robot_frame_id: base_link
 map_frame_id: map
 
-# -- control system --
+# -- control parameters --
 control_sampling_time: 0.1 # [s] control interval
 reference_speed: 1.0 # [m/s]
-zero_speed_points_around_goal: 1 # Number of waypoints which are set the speed to zero for stop at the goal
 goal_judgement_distance: 0.1 # Threshold for goal judgment [m]
+
+# -- Prediction path smoothing parameters --
+curvature_smoothing_num: 10 # Smoothing value for curvature calculation
+max_curvature_change_rate: 1.0 # Saturate value for curvature change rate [1/m^2]
+speed_reduction_rate: 0.1 # Reduce the speed reference based on the rate of curvature change; v_ref' = v_ref * exp (-speed_reduction_rate * curvature_rate^2)
+deceleration_rate_for_stop: 0.3 # Reduce the speed reference for stopping; v_ref'  = v_ref * (1 - exp(-deceleration_rate_for_stop * (x_goal -x_f))), recommend the same value as a a_min in MPC formulation
 
 # -- C/GMRES solver parameters --
 Tf: 1.0 # Length of predictive horizon in C/GMRES [s]
@@ -20,9 +25,14 @@ zeta: 62.5 # A parameter for stabilization of the C/GMRES method
 kmax: 5 # dimension of the Krylov subspace and maximum iteration number
 
 # -- MPC parameters --
-weight_lat_error: 1.0 # Weight for lateral error from reference path in stage cost
-weight_yaw_error: 1.0 # Weight for yaw error from reference path in stage cost
-terminal_weight_lat_error: 1.0 # Weight for lateral error from reference path in terminal cost
-terminal_weight_yaw_error: 1.0 # Weight for yaw error from reference path in terminal cost
-weight_input_angular_yaw: 1.0 # Weight for angular velocity input
-weight_input_twist_x: 1.0 # Weight for forward/backward velocity input
+weight_lat_error: 0.1 # Weight for lateral error from reference path in stage cost
+weight_yaw_error: 0.1 # Weight for yaw error from reference path in stage cost
+weight_twist_x_error: 0.1 # Weight for twist_x error from reference path in stage cost
+terminal_weight_lat_error: 0.1 # Weight for lateral error from reference path in terminal cost
+terminal_weight_yaw_error: 0.1 # Weight for yaw error from reference path in terminal cost
+terminal_weight_twist_x_error: 0.1 # Weight for twist_x error from reference path in terminal cost
+weight_input_angular_yaw: 0.01 # Weight for angular velocity input
+weight_input_accel: 0.01 # Weight for acceleration input
+barrier_coefficient: 0.1 # barrier function coefficient for inequality constraint
+maximum_acceleration: 0.2 # Maximum acceleration
+minimum_deceleration: -0.2 # Minimum deceleration

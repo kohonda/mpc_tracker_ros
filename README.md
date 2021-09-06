@@ -1,7 +1,9 @@
 # mpc_tracker_ros
-Trajectory Tracking Controller for ROS Package Using Nonlinear Model Predictive Control (MPC) with C/GMRES Method
+Motion Controller for trajectory tracking Using Nonlinear Model Predictive Control (MPC) with C/GMRES Method.
 
+Control target: two-wheel differential drive mobile robot
 
+Control input: twist.x and twist.yaw
 
 ## Requirements
 
@@ -26,6 +28,8 @@ Trajectory Tracking Controller for ROS Package Using Nonlinear Model Predictive 
 
 ```bash
 sudo apt update
+
+sudo apt install libeigen3-dev
 
 sudo apt install -y python-catkin-pkg python-rosdep ros-$ROS_DISTRO-catkin
 
@@ -60,7 +64,7 @@ colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
 
 
 
-## How to run offline simulation
+## How to test by offline simulation
 
 ```bash
 cd catkin_ws/src
@@ -74,7 +78,7 @@ Then, start simulation with real-time plot and get the simulation result at `mpc
 
 
 
-## How to launch online node
+## How to launch ROS node
 
 ```bash
 cd catkin_ws
@@ -86,6 +90,6 @@ roslaunch mpc_tracker mpc_tracker.launch
 
 
 
-## Parameters
+## Configuration and Parameters
 
 TODO

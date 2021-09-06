@@ -21,10 +21,15 @@ namespace cgmres
         static constexpr int dim_control_input_ = MPC_INPUT::DIM;
         static constexpr int dim_constraints_ = 0;
 
-        std::array<double, dim_state_> q_ = {0.0, 1.0, 1.0};
-        std::array<double, dim_state_> q_terminal_ = {0.0, 1.0, 1.0};
-        std::array<double, dim_state_> x_ref_ = {0.0, 0.0, 0.0};
-        std::array<double, dim_control_input_> r_ = {1.0, 1.0};
+        std::array<double, dim_state_> q_ = {0.0, 0.1, 0.1, 0.1};
+        std::array<double, dim_state_> q_terminal_ = {0.0, 0.1, 0.1, 0.1};
+        std::array<double, dim_state_> x_ref_ = {0.0, 0.0, 0.0, 0.0};
+        std::array<double, dim_control_input_> r_ = {0.01, 0.01};
+
+        double barrier_coefficient_ = 0.1;
+        double a_max_ = 0.2;
+        double a_min_ = -0.2;
+        // const double gamma_ = 0.0;
 
     public:
         // Computes the state equation f(t, x, u).
@@ -32,8 +37,9 @@ namespace cgmres
         // x : state vector
         // u : control input vector
         // f : the value of f(t, x, u)
-        void stateFunc(const double t, const std::vector<double> &x, const double *u, std::function<double(double)> &traj_curvature, std::function<double(double)> &traj_speed,
-                       std::function<double(double)> &drivable_width, std::vector<double> &dx) const;
+        void
+        stateFunc(const double t, const std::vector<double> &x, const double *u, std::function<double(double)> &traj_curvature, std::function<double(double)> &traj_speed,
+                  std::function<double(double)> &drivable_width, std::vector<double> &dx) const;
 
         // Computes the partial derivative of terminal cost with respect to state,
         // i.e., dphi/dx(t, x).
@@ -73,7 +79,7 @@ namespace cgmres
         int dim_constraints() const;
 
         // Set parameters
-        void set_parameters(const std::array<double, MPC_STATE_SPACE::DIM> &q, const std::array<double, MPC_STATE_SPACE::DIM> &q_terminal, const std::array<double, MPC_INPUT::DIM> &r);
+        void set_parameters(const std::array<double, MPC_STATE_SPACE::DIM> &q, const std::array<double, MPC_STATE_SPACE::DIM> &q_terminal, const std::array<double, MPC_INPUT::DIM> &r, const double barrier_coefficient, const double a_max, const double a_min);
     };
 
 } // namespace cgmres

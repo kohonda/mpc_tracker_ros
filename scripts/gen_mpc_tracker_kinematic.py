@@ -24,22 +24,25 @@ r = ego_input.generate_r()
 
 
 ref_speed = Symbol('ref_speed')
-x_ref['vel'] = ref_speed
+x_ref['twist_x'] = ref_speed
 curvature = Symbol('curvature')
 # drivable_width = Symbol('drivable_width')
+a_max = Symbol('a_max_')
+a_min = Symbol('a_min_')
 
 f_ego = ego_state.define_f()
 
 # Define state function
-f_ego['x_f'] = ego_input.twist_x * cos(ego_state.yaw_f)/(1 - curvature * ego_state.y_f)
-f_ego['y_f'] = ego_input.twist_x * sin(ego_state.yaw_f)
-f_ego['yaw_f'] = ego_input.twist_yaw - (curvature*ego_input.twist_x*cos(ego_state.yaw_f))/(1-curvature*ego_state.y_f)
+f_ego['x_f'] = ego_state.twist_x * cos(ego_state.yaw_f)/(1 - curvature * ego_state.y_f)
+f_ego['y_f'] = ego_state.twist_x * sin(ego_state.yaw_f)
+f_ego['yaw_f'] = ego_input.twist_yaw - (curvature*ego_state.twist_x*cos(ego_state.yaw_f))/(1-curvature*ego_state.y_f)
+f_ego['twist_x'] = ego_input.accel
 
 assert is_None_dict(f_ego), '[Error] Definition of ego state function'
 
 
 # Define stage cost function
-L_ego = sum(q[key]*(ego_state.state_dict[key] - x_ref[key])**2 for key in ego_state.state_dict)/2 + 1/2 * r['twist_yaw'] * ego_input.input_dict['twist_yaw'] ** 2 + 1/2 * r['twist_x'] * (ego_input.input_dict['twist_x']-ref_speed)**2
+L_ego = sum(q[key]*(ego_state.state_dict[key] - x_ref[key])**2 for key in ego_state.state_dict)/2 + 1/2 * r['twist_yaw'] * ego_input.input_dict['twist_yaw'] ** 2 + 1/2 * r['accel'] * ego_input.input_dict['accel']**2
 
 # Define constraint
 # Not support equality constraint, only support inequality constraint
@@ -48,8 +51,8 @@ L_ego = sum(q[key]*(ego_state.state_dict[key] - x_ref[key])**2 for key in ego_st
 ineq_constraints = [
     # drivable_width/2 - ego_state.y_f,
     # ego_state.y_f - drivable_width/2,
-    # ego_input.accel - 2.0,
-    # -2.0 - ego_input.accel,
+    ego_input.accel - a_max,
+    a_min - ego_input.accel,
     # ego_input.steer - 0.6,
     # -0.6 - ego_input.steer
 ]
