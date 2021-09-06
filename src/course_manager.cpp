@@ -2,7 +2,19 @@
 
 namespace pathtrack_tools
 {
-    CourseManager::CourseManager(/* args */)
+
+    CourseManager::CourseManager()
+    {
+        nearest_index_ = 0;
+        nearest_ratio_ = 1.0;
+        second_nearest_index_ = 0;
+        second_nearest_ratio_ = 0.0;
+        current_pose_x_f_ = 0.0;
+        hash_xf2index_ = {{0.0, 0}};
+    }
+
+    CourseManager::CourseManager(const int curvature_smoothing_num, const double max_curvature_change_rate, const double speed_reduction_rate, const double decelation_rate_for_stop)
+        : curvature_smoothing_num_{curvature_smoothing_num}, max_curvature_change_rate_{max_curvature_change_rate}, speed_reduction_rate_{speed_reduction_rate}, decelation_rate_for_stop_{decelation_rate_for_stop}
     {
         nearest_index_ = 0;
         nearest_ratio_ = 1.0;
@@ -219,7 +231,7 @@ namespace pathtrack_tools
         for (size_t i = 0; i < ref_speed->size(); i++)
         {
             // const double delta_xf = accumulated_path_length[i] - accumulated_path_length[i - 1];
-            ref_speed->at(i) = std::max(0.0, ref_speed->at(i) * (1 - std::exp(-decelation_for_stop_ * (final_x_f - accumulated_path_length[i]))));
+            ref_speed->at(i) = std::max(0.0, ref_speed->at(i) * (1 - std::exp(-decelation_rate_for_stop_ * (final_x_f - accumulated_path_length[i]))));
         }
     }
 
