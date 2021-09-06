@@ -29,7 +29,7 @@ namespace pathtrack_tools
      *
      */
       CourseManager(/* args */);
-      CourseManager(const int curvature_smoothing_num, const double max_curvature_change_rate, const double speed_reduction_rate, const double decelation_rate_for_stop);
+      CourseManager(const int curvature_smoothing_num, const double max_curvature_change_rate, const double speed_reduction_rate, const double deceleration_rate_for_stop);
 
       /**
      * @brief Destroy the CourseManager object
@@ -92,10 +92,10 @@ namespace pathtrack_tools
    private:
       MPCCourse mpc_course_; //!< @brief driving course interface using in MPC
       // Parameters for path smoothing and filtering
-      const int curvature_smoothing_num_ = 10;       //!< @brief Smoothing value for curvature calculation
-      const double max_curvature_change_rate_ = 1.0; //!< @brief Saturate value for curvature change rate [1/m^2]
-      const double speed_reduction_rate_ = 0.1;      //!< @brief Reduce the speed reference based on the rate of curvature change; v_ref' = v_ref * exp (-speed_reduction_rate * curvature_rate^2)
-      const double decelation_rate_for_stop_ = 0.3;  //!< @brief Reduce the speed reference for stopping; v_ref'  = v_ref * (1 - exp(-decelation_rate_for_stop * (x_goal -x_f))), recommend the same value as a a_min in MPC formulation
+      const int curvature_smoothing_num_ = 10;        //!< @brief Smoothing value for curvature calculation
+      const double max_curvature_change_rate_ = 1.0;  //!< @brief Saturate value for curvature change rate [1/m^2]
+      const double speed_reduction_rate_ = 0.1;       //!< @brief Reduce the speed reference based on the rate of curvature change; v_ref' = v_ref * exp (-speed_reduction_rate * curvature_rate^2)
+      const double deceleration_rate_for_stop_ = 0.3; //!< @brief Reduce the speed reference for stopping; v_ref'  = v_ref * (1 - exp(-deceleration_rate_for_stop * (x_goal -x_f))), recommend the same value as a a_min in MPC formulation
 
       // Parameters for lookup table (xf) -> (nearest index)
       std::unordered_map<double, int> hash_xf2index_; // Hash that connects x_f to the nearest index

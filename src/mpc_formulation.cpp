@@ -50,7 +50,7 @@ namespace cgmres
         // const double ref_speed = traj_speed(x[MPC_STATE_SPACE::X_F]);
 
         hu[MPC_INPUT::ANGULAR_VEL_YAW] = lmd[MPC_STATE_SPACE::YAW_F] + 1.0 * r_[MPC_INPUT::ANGULAR_VEL_YAW] * u[MPC_INPUT::ANGULAR_VEL_YAW];
-        hu[MPC_INPUT::ACCEL] = lmd[MPC_STATE_SPACE::TWIST_X] + 1.0 * r_[MPC_INPUT::ACCEL] * u[MPC_INPUT::ACCEL] + ((a_max_ - u[MPC_INPUT::ACCEL] > 1.0) ? (rho_g_ / (a_max_ - u[MPC_INPUT::ACCEL])) : ((1.0 / 2.0) * rho_g_ * (-2.0 * a_max_ + 2.0 * u[MPC_INPUT::ACCEL] + 4.0))) + ((a_min_ - u[MPC_INPUT::ACCEL] < -1.0) ? (-rho_g_ / (-a_min_ + u[MPC_INPUT::ACCEL])) : ((1.0 / 2.0) * rho_g_ * (-2.0 * a_min_ + 2.0 * u[MPC_INPUT::ACCEL] - 4.0)));
+        hu[MPC_INPUT::ACCEL] = lmd[MPC_STATE_SPACE::TWIST_X] + 1.0 * r_[MPC_INPUT::ACCEL] * u[MPC_INPUT::ACCEL] + ((a_max_ - u[MPC_INPUT::ACCEL] > 1.0) ? (barrier_coefficient_ / (a_max_ - u[MPC_INPUT::ACCEL])) : ((1.0 / 2.0) * barrier_coefficient_ * (-2.0 * a_max_ + 2.0 * u[MPC_INPUT::ACCEL] + 4.0))) + ((a_min_ - u[MPC_INPUT::ACCEL] < -1.0) ? (-barrier_coefficient_ / (-a_min_ + u[MPC_INPUT::ACCEL])) : ((1.0 / 2.0) * barrier_coefficient_ * (-2.0 * a_min_ + 2.0 * u[MPC_INPUT::ACCEL] - 4.0)));
     }
 
     int NMPCModel::dim_state() const
@@ -68,11 +68,14 @@ namespace cgmres
         return dim_constraints_;
     }
 
-    void NMPCModel::set_parameters(const std::array<double, MPC_STATE_SPACE::DIM> &q, const std::array<double, MPC_STATE_SPACE::DIM> &q_terminal, const std::array<double, MPC_INPUT::DIM> &r)
+    void NMPCModel::set_parameters(const std::array<double, MPC_STATE_SPACE::DIM> &q, const std::array<double, MPC_STATE_SPACE::DIM> &q_terminal, const std::array<double, MPC_INPUT::DIM> &r, const double barrier_coefficient, const double a_max, const double a_min)
     {
         q_ = q;
         q_terminal_ = q_terminal;
         r_ = r;
+        barrier_coefficient_ = barrier_coefficient;
+        a_max_ = a_max;
+        a_min_ = a_min;
     }
 
 } // namespace cgmres

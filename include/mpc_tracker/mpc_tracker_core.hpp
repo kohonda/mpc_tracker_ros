@@ -22,7 +22,7 @@
 #include "StopWatch.hpp"
 
 /**
- * @class waypoint tracker class
+ * @class reference trajectory tracker class
  * @brief calculate control input based nonlinear MPC using C/GMRES method
  * @author Kohei Honda
  * @date Aug.2021
@@ -57,8 +57,13 @@ private:
 
     /*control system parametes*/
     double control_sampling_time_; //!< @brief control interval [s]
-    // TODO: とりあえずreference speedは固定.-> reference pathをposeのみならず車速埋め込みにする
-    double reference_speed_; //!< @brief robot reference speed [m/s]
+    double reference_speed_;       //!< @brief robot reference speed [m/s]
+
+    /*path smoothing parameters*/
+    int curvature_smoothing_num_;       //!< @brief Smoothing value for curvature calculation
+    double max_curvature_change_rate_;  //!< @brief Saturate value for curvature change rate [1/m^2]
+    double speed_reduction_rate_;       //!< @brief Reduce the speed reference based on the rate of curvature change; v_ref' = v_ref * exp (-speed_reduction_rate * curvature_rate^2)
+    double deceleration_rate_for_stop_; //!< @brief Reduce the speed reference for stopping; v_ref'  = v_ref * (1 - exp(-deceleration_rate_for_stop * (x_goal -x_f))), recommend the same value as a a_min in MPC formulation
 
     /*cgmres solver parameters*/
     struct CGMRESParam
@@ -78,6 +83,9 @@ private:
         std::array<double, MPC_STATE_SPACE::DIM> q_;          //!< @brief Weight of state for stage cost in MPC
         std::array<double, MPC_STATE_SPACE::DIM> q_terminal_; //!< @brief Weight of state for terminal cost in MPC
         std::array<double, MPC_INPUT::DIM> r_;                //!< @brief Weight of input for stage cost in MPC
+        double barrier_coefficient_;                          //!< @brief barrier function coefficient for inequality constraint
+        double a_max_;                                        //!< @brief Maximum acceleration
+        double a_min_;                                        //!< @brief Minimum deceleration
     };
     MPCParam mpc_param_;
 
@@ -93,9 +101,9 @@ private:
     Twist prev_twist_cmd_; //!< @brief published twist command just before
 
     /*function used in the predictive horizon of MPC*/
-    std::function<double(double)> path_curvature_ = [this](const double &x_f) { return this->course_manager_.get_curvature(x_f); };      //!< @brief return curvature from pose x_f in frenet coordinate
-    std::function<double(double)> trajectory_speed_ = [this](const double &x_f) { return this->course_manager_.get_speed(x_f); };        //!< @brief return reference speed from pose x_f in frenet coordinate
-    std::function<double(double)> drivable_width_ = [this](const double &x_f) { return this->course_manager_.get_drivable_width(x_f); }; // not used now
+    std::function<double(double)> path_curvature_;   //!< @brief return curvature from pose x_f in frenet coordinate
+    std::function<double(double)> trajectory_speed_; //!< @brief return reference speed from pose x_f in frenet coordinate
+    std::function<double(double)> drivable_width_;   // not used now
 
     /*Flags*/
     bool is_robot_state_ok_ = false;
@@ -107,10 +115,10 @@ private:
     ros::Publisher pub_F_norm_;           //! @brief F norm is Deviation from optimal solution
 
     /*Library*/
-    std::unique_ptr<cgmres::ContinuationGMRES> nmpc_solver_ptr_;       //!< @brief nonlinear mpc solver pointer
-    pathtrack_tools::CourseManager course_manager_;                    //!< @brief Manage reference path, reference speed and drivable area in MPC
-    pathtrack_tools::FrenetSerretConverter frenet_serret_converter_;   //!< @brief Converter between global coordinate and frenet-serret coordinate
-    std::unique_ptr<pathtrack_tools::MPCSimulator> mpc_simulator_ptr_; //!< @brief Reproduct MPC predictive state
+    std::unique_ptr<cgmres::ContinuationGMRES> nmpc_solver_ptr_;         //!< @brief nonlinear mpc solver pointer
+    std::unique_ptr<pathtrack_tools::CourseManager> course_manager_ptr_; //!< @brief Manage reference path, reference speed and drivable area in MPC
+    pathtrack_tools::FrenetSerretConverter frenet_serret_converter_;     //!< @brief Converter between global coordinate and frenet-serret coordinate
+    std::unique_ptr<pathtrack_tools::MPCSimulator> mpc_simulator_ptr_;   //!< @brief Reproduct MPC predictive state
     StopWatch stop_watch_;
     // std::unique_ptr<pathtrack_tools::FrenetStateFilter> frenet_state_filter_ptr_; //!< @brief Frenet state estimate from observed info
 

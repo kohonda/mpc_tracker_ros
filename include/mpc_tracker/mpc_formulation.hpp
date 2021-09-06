@@ -26,9 +26,9 @@ namespace cgmres
         std::array<double, dim_state_> x_ref_ = {0.0, 0.0, 0.0, 0.0};
         std::array<double, dim_control_input_> r_ = {0.01, 0.01};
 
-        const double rho_g_ = 0.1;
-        const double a_max_ = 0.2;
-        const double a_min_ = -0.2;
+        double barrier_coefficient_ = 0.1;
+        double a_max_ = 0.2;
+        double a_min_ = -0.2;
         // const double gamma_ = 0.0;
 
     public:
@@ -79,7 +79,7 @@ namespace cgmres
         int dim_constraints() const;
 
         // Set parameters
-        void set_parameters(const std::array<double, MPC_STATE_SPACE::DIM> &q, const std::array<double, MPC_STATE_SPACE::DIM> &q_terminal, const std::array<double, MPC_INPUT::DIM> &r);
+        void set_parameters(const std::array<double, MPC_STATE_SPACE::DIM> &q, const std::array<double, MPC_STATE_SPACE::DIM> &q_terminal, const std::array<double, MPC_INPUT::DIM> &r, const double barrier_coefficient, const double a_max, const double a_min);
     };
 
 } // namespace cgmres

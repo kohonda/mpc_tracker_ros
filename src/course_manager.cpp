@@ -13,8 +13,8 @@ namespace pathtrack_tools
         hash_xf2index_ = {{0.0, 0}};
     }
 
-    CourseManager::CourseManager(const int curvature_smoothing_num, const double max_curvature_change_rate, const double speed_reduction_rate, const double decelation_rate_for_stop)
-        : curvature_smoothing_num_{curvature_smoothing_num}, max_curvature_change_rate_{max_curvature_change_rate}, speed_reduction_rate_{speed_reduction_rate}, decelation_rate_for_stop_{decelation_rate_for_stop}
+    CourseManager::CourseManager(const int curvature_smoothing_num, const double max_curvature_change_rate, const double speed_reduction_rate, const double deceleration_rate_for_stop)
+        : curvature_smoothing_num_{curvature_smoothing_num}, max_curvature_change_rate_{max_curvature_change_rate}, speed_reduction_rate_{speed_reduction_rate}, deceleration_rate_for_stop_{deceleration_rate_for_stop}
     {
         nearest_index_ = 0;
         nearest_ratio_ = 1.0;
@@ -99,13 +99,13 @@ namespace pathtrack_tools
         mpc_course_.clear();
 
         /*convert nav_msgs::path to mpc_course*/
-        for (const auto &pose : path.poses)
+        mpc_course_.resize(path.poses.size());
+        for (size_t i = 0; i < path.poses.size(); i++)
         {
-            mpc_course_.x.push_back(pose.pose.position.x);
-            mpc_course_.y.push_back(pose.pose.position.y);
-            mpc_course_.z.push_back(pose.pose.position.z);
-            mpc_course_.yaw.push_back(tf2::getYaw(pose.pose.orientation));
-            mpc_course_.speed.push_back(reference_speed);
+            mpc_course_.x.at(i) = path.poses.at(i).pose.position.x;
+            mpc_course_.y.at(i) = path.poses.at(i).pose.position.y;
+            mpc_course_.yaw.at(i) = tf2::getYaw(path.poses.at(i).pose.orientation);
+            mpc_course_.speed.at(i) = reference_speed;
         }
 
         // set accumulated path length, which is nearly equal to x_f
@@ -210,7 +210,7 @@ namespace pathtrack_tools
             curvature_vec[i] = curvature;
         }
 
-        // Caluculate the curvature except the edge
+        // Calculate the curvature except the edge
         for (int i = 0; i < std::min(path_size, L); i++)
         {
             curvature_vec[i] = curvature_vec[std::min(L, path_size - 1)];
@@ -231,7 +231,7 @@ namespace pathtrack_tools
         for (size_t i = 0; i < ref_speed->size(); i++)
         {
             // const double delta_xf = accumulated_path_length[i] - accumulated_path_length[i - 1];
-            ref_speed->at(i) = std::max(0.0, ref_speed->at(i) * (1 - std::exp(-decelation_rate_for_stop_ * (final_x_f - accumulated_path_length[i]))));
+            ref_speed->at(i) = std::max(0.0, ref_speed->at(i) * (1 - std::exp(-deceleration_rate_for_stop_ * (final_x_f - accumulated_path_length[i]))));
         }
     }
 

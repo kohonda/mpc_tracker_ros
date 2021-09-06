@@ -7,6 +7,12 @@ MPCTracker::MPCTracker() : nh_(""), private_nh_("~"), tf_listener_(tf_buffer_), 
     private_nh_.param("control_sampling_time", control_sampling_time_, static_cast<double>(0.1));
     private_nh_.param("reference_speed", reference_speed_, static_cast<double>(1.0));
 
+    /*path smoothing parameters*/
+    private_nh_.param("curvature_smoothing_num", curvature_smoothing_num_, static_cast<int>(10));
+    private_nh_.param("max_curvature_change_rate", max_curvature_change_rate_, static_cast<double>(1.0));
+    private_nh_.param("speed_reduction_rate", speed_reduction_rate_, static_cast<double>(0.1));
+    private_nh_.param("deceleration_rate_for_stop", deceleration_rate_for_stop_, static_cast<double>(0.3));
+
     /*cgmres parameters*/
     private_nh_.param("Tf", cgmres_param_.Tf_, static_cast<double>(1.0));
     private_nh_.param("alpha", cgmres_param_.alpha_, static_cast<double>(0.5));
@@ -17,25 +23,36 @@ MPCTracker::MPCTracker() : nh_(""), private_nh_("~"), tf_listener_(tf_buffer_), 
 
     /*mpc parameters*/
     mpc_param_.q_.at(MPC_STATE_SPACE::X_F) = 0.0;
-    private_nh_.param("weight_lat_error", mpc_param_.q_.at(MPC_STATE_SPACE::Y_F), static_cast<double>(1.0));
-    private_nh_.param("weight_yaw_error", mpc_param_.q_.at(MPC_STATE_SPACE::YAW_F), static_cast<double>(1.0));
+    private_nh_.param("weight_lat_error", mpc_param_.q_.at(MPC_STATE_SPACE::Y_F), static_cast<double>(0.1));
+    private_nh_.param("weight_yaw_error", mpc_param_.q_.at(MPC_STATE_SPACE::YAW_F), static_cast<double>(0.1));
+    private_nh_.param("weight_twist_x_error", mpc_param_.q_.at(MPC_STATE_SPACE::TWIST_X), static_cast<double>(0.1));
     mpc_param_.q_terminal_.at(MPC_STATE_SPACE::X_F) = 0.0;
-    private_nh_.param("terminal_weight_lat_error", mpc_param_.q_terminal_.at(MPC_STATE_SPACE::Y_F), static_cast<double>(1.0));
-    private_nh_.param("terminal_weight_yaw_error", mpc_param_.q_terminal_.at(MPC_STATE_SPACE::YAW_F), static_cast<double>(1.0));
-    private_nh_.param("weight_input_angular_yaw", mpc_param_.r_.at(MPC_INPUT::ANGULAR_VEL_YAW), static_cast<double>(1.0));
-    private_nh_.param("weight_input_accel", mpc_param_.r_.at(MPC_INPUT::ACCEL), static_cast<double>(1.0));
-    // TODO: add twist xの重み
-    // TODO: max, min of input
+    private_nh_.param("terminal_weight_lat_error", mpc_param_.q_terminal_.at(MPC_STATE_SPACE::Y_F), static_cast<double>(0.1));
+    private_nh_.param("terminal_weight_yaw_error", mpc_param_.q_terminal_.at(MPC_STATE_SPACE::YAW_F), static_cast<double>(0.1));
+    private_nh_.param("terminal_weight_twist_x_error", mpc_param_.q_terminal_.at(MPC_STATE_SPACE::TWIST_X), static_cast<double>(0.1));
+    private_nh_.param("weight_input_angular_yaw", mpc_param_.r_.at(MPC_INPUT::ANGULAR_VEL_YAW), static_cast<double>(0.01));
+    private_nh_.param("weight_input_accel", mpc_param_.r_.at(MPC_INPUT::ACCEL), static_cast<double>(0.01));
+    private_nh_.param("barrier_coefficient", mpc_param_.barrier_coefficient_, static_cast<double>(0.1));
+    private_nh_.param("maximum_acceleration", mpc_param_.a_max_, static_cast<double>(0.2));
+    private_nh_.param("minimum_deceleration", mpc_param_.a_min_, static_cast<double>(-0.2));
 
     /*Initialize C/GMRES Solver */
     nmpc_solver_ptr_ =
         std::make_unique<cgmres::ContinuationGMRES>(cgmres_param_.Tf_, cgmres_param_.alpha_, cgmres_param_.N_, cgmres_param_.finite_distance_increment_, cgmres_param_.zeta_, cgmres_param_.kmax_);
     const double solution_initial_guess[MPC_INPUT::DIM] = {0.01, 0.01};
     nmpc_solver_ptr_->setParametersForInitialization(solution_initial_guess, 1e-06, 50);
-    nmpc_solver_ptr_->continuation_problem_.ocp_.model_.set_parameters(mpc_param_.q_, mpc_param_.q_terminal_, mpc_param_.r_);
+    nmpc_solver_ptr_->continuation_problem_.ocp_.model_.set_parameters(mpc_param_.q_, mpc_param_.q_terminal_, mpc_param_.r_, mpc_param_.barrier_coefficient_, mpc_param_.a_max_, mpc_param_.a_min_);
 
     /*Initialize frenet state filter*/
     // frenet_state_filter_ptr_ = std::make_unique<pathtrack_tools::FrenetStateFilter>(control_sampling_time_);
+
+    /*Initialize course manager class*/
+    course_manager_ptr_ = std::make_unique<pathtrack_tools::CourseManager>(curvature_smoothing_num_, max_curvature_change_rate_, speed_reduction_rate_, deceleration_rate_for_stop_);
+
+    /*Set functions used in prediction horizon*/
+    path_curvature_ = [this](const double &x_f) { return this->course_manager_ptr_->get_curvature(x_f); };      //!< @brief return curvature from pose x_f in frenet coordinate
+    trajectory_speed_ = [this](const double &x_f) { return this->course_manager_ptr_->get_speed(x_f); };        //!< @brief return reference speed from pose x_f in frenet coordinate
+    drivable_width_ = [this](const double &x_f) { return this->course_manager_ptr_->get_drivable_width(x_f); }; // not used now
 
     /*set up ros system*/
     timer_control_ = nh_.createTimer(ros::Duration(control_sampling_time_), &MPCTracker::timer_callback, this);
@@ -47,7 +64,7 @@ MPCTracker::MPCTracker() : nh_(""), private_nh_("~"), tf_listener_(tf_buffer_), 
     private_nh_.param("in_odom_topic", in_odom_topic, static_cast<std::string>("odom"));
     private_nh_.param("robot_frame_id", robot_frame_id_, static_cast<std::string>("base_link"));
     private_nh_.param("map_frame_id", map_frame_id_, static_cast<std::string>("map"));
-    pub_twist_cmd_ = nh_.advertise<geometry_msgs::Twist>(out_twist_topic, 1); // TODO: twist_timestampedに変更
+    pub_twist_cmd_ = nh_.advertise<geometry_msgs::Twist>(out_twist_topic, 1);
     sub_ref_path_ = nh_.subscribe(in_refpath_topic, 1, &MPCTracker::callback_reference_path, this);
     sub_odom_ = nh_.subscribe(in_odom_topic, 1, &MPCTracker::callback_odom, this);
 
@@ -60,7 +77,7 @@ MPCTracker::MPCTracker() : nh_(""), private_nh_("~"), tf_listener_(tf_buffer_), 
 
 MPCTracker::~MPCTracker()
 {
-    ROS_INFO("Destoruct MPC tracker node");
+    ROS_INFO("Destruct MPC tracker node");
     Twist stop_twist(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
     publish_twist(stop_twist);
 };
@@ -70,7 +87,7 @@ void MPCTracker::timer_callback([[maybe_unused]] const ros::TimerEvent &te)
     stop_watch_.lap();
 
     /*status check*/
-    const int path_size = course_manager_.get_path_size();
+    const int path_size = course_manager_ptr_->get_path_size();
     if (path_size == 0 || !is_robot_state_ok_)
     {
         ROS_INFO("[MPC] MPC is not solved. ref_path_size: %d, is_pose_set: %d", path_size, is_robot_state_ok_);
@@ -79,7 +96,7 @@ void MPCTracker::timer_callback([[maybe_unused]] const ros::TimerEvent &te)
     }
 
     /*coordinate convert from euclid to frenet-serret*/
-    robot_status_.robot_pose_frenet_ = frenet_serret_converter_.global2frenet(course_manager_.get_mpc_course(), robot_status_.robot_pose_global_);
+    robot_status_.robot_pose_frenet_ = frenet_serret_converter_.global2frenet(course_manager_ptr_->get_mpc_course(), robot_status_.robot_pose_global_);
 
     /*Set state vector*/
     const std::vector<double> state_vec{robot_status_.robot_pose_frenet_.x_f, robot_status_.robot_pose_frenet_.y_f, robot_status_.robot_pose_frenet_.yaw_f};
@@ -113,7 +130,7 @@ void MPCTracker::timer_callback([[maybe_unused]] const ros::TimerEvent &te)
     const double calculation_time = stop_watch_.lap();
 
     /*NAN Guard*/
-    if (!std::isnan(control_input_vec[MPC_INPUT::ACCEL]) || !std::isnan(control_input_vec[MPC_INPUT::ANGULAR_VEL_YAW]))
+    if (std::isnan(control_input_vec[MPC_INPUT::ACCEL]) || std::isnan(control_input_vec[MPC_INPUT::ANGULAR_VEL_YAW]))
     {
         ROS_ERROR("[MPC] Calculate NAN control input");
         publish_twist(prev_twist_cmd_);
@@ -179,6 +196,9 @@ void MPCTracker::callback_odom(const nav_msgs::Odometry &odom)
     robot_status_.robot_twist_.roll = odom.twist.twist.angular.x; // not used now
     robot_status_.robot_twist_.pitch = odom.twist.twist.linear.y; // note used now
     robot_status_.robot_twist_.yaw = odom.twist.twist.angular.z;
+
+    /*check first msg*/
+    is_robot_state_ok_ = true;
 };
 
 // update reference_course in MPC and calculate curvature
@@ -193,9 +213,9 @@ void MPCTracker::callback_reference_path(const nav_msgs::Path &path)
     /*Set reference course, calculate path curvature and filtering path used in MPC*/
     // TODO::NOTE: NOW SET REFERENCE SPEED IS CONSTANT
     // TODO : リサンプリングがひつようかも
-    course_manager_.set_course_from_nav_msgs(path, reference_speed_);
+    course_manager_ptr_->set_course_from_nav_msgs(path, reference_speed_);
 
-    ROS_INFO("[MPC] Path callback: receive path size = %d", course_manager_.get_mpc_course().size());
+    ROS_INFO("[MPC] Path callback: receive path size = %d", course_manager_ptr_->get_mpc_course().size());
 };
 
 void MPCTracker::publish_twist(const Twist &twist_cmd) const
