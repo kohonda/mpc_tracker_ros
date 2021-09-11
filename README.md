@@ -3,7 +3,7 @@ Motion Controller for trajectory tracking Using Nonlinear Model Predictive Contr
 
 Control target: two-wheel differential drive mobile robot
 
-Control input: twist.x and twist.yaw
+Outputted control input: twist.x and twist.yaw
 
 ## Requirements
 
@@ -11,7 +11,6 @@ Control input: twist.x and twist.yaw
 - gcc 7.50 or higher
 - cmake 3.0.2 or higher
 - ROS Melodic or Noetic
-
 
 
 ## Third Party
@@ -33,11 +32,10 @@ sudo apt install libeigen3-dev
 
 sudo apt install -y python-catkin-pkg python-rosdep ros-$ROS_DISTRO-catkin
 
-sudo apt install -y python3-pip python3-colcon-common-extensions python3-setuptools python3-vcstool
+sudo apt install -y python3-colcon-common-extensions
 
 sudo apt install python3-matplotlib, python3-numpy
 
-pip3 install -U setuptools
 ```
 
 
@@ -71,8 +69,6 @@ cd catkin_ws/src
 ```
 
 Then, start simulation with real-time plot and get the simulation result at `mpc_tracker_ros/simulation/simulation_result/result.csv` after termination.
-
-[sample movie](movie/sinwave05.gif)
 
 
 
