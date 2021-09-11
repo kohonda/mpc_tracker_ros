@@ -81,7 +81,7 @@ source install/setup.bash
 
 roslaunch mpc_tracker mpc_tracker.launch
 ```
-
+![offline_simulation_sinwave](https://user-images.githubusercontent.com/50091520/132941168-dd29277c-3ea1-484d-8265-42da788f6a4e.mp4)
 
 
 ## Configuration and Parameters
