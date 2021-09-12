@@ -122,8 +122,8 @@ int main(int argc, char *argv[])
         else
         {
             // Update control_input_vec by C/GMRES method
-            const bool mpc_solver_error = nmpc_solver.controlUpdate(current_time, current_state_vec_frenet, sampling_time, course_curvature, course_speed, drivable_width, control_input_vec, &control_input_series);
-            if (mpc_solver_error)
+            const bool is_mpc_solved = nmpc_solver.controlUpdate(current_time, current_state_vec_frenet, sampling_time, course_curvature, course_speed, drivable_width, control_input_vec, &control_input_series);
+            if (!is_mpc_solved)
             {
                 std::cerr << "Break Down C/GMRES Method" << std::endl;
                 exit(-1);
