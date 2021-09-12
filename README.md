@@ -70,7 +70,7 @@ cd catkin_ws/src
 
 Then, start simulation with real-time plot and get the simulation result at `mpc_tracker_ros/simulation/simulation_result/result.csv` after termination.
 
-![offline_simulation_sinwave](https://user-images.githubusercontent.com/50091520/132941168-dd29277c-3ea1-484d-8265-42da788f6a4e.mp4)
+![offline_simulation_movie_sinwave](https://user-images.githubusercontent.com/50091520/132941168-dd29277c-3ea1-484d-8265-42da788f6a4e.mp4)
 
 
 ## How to launch ROS node
@@ -87,14 +87,14 @@ roslaunch mpc_tracker mpc_tracker.launch
 ```bash
 Node [/mpc_tracker]
 Publications: 
- * /twist_cmd [geometry_msgs/Twist]
- * /mpc_tracker/F_norm [std_msgs/Float32]
+ * /twist_cmd [geometry_msgs/Twist] : calculated control input (twist.yaw, twist.x)
+ * /mpc_tracker/F_norm [std_msgs/Float32] : Deviation from KKT conditions
  * /mpc_tracker/calculation_time [std_msgs/Float32]
- * /mpc_tracker/cmd_twist_x [std_msgs/Float32]
- * /mpc_tracker/cmd_twist_yaw [std_msgs/Float32]
- * /mpc_tracker/predictive_pose [visualization_msgs/MarkerArray]
- * /mpc_tracker/robot_twist_x [std_msgs/Float32]
- * /mpc_tracker/robot_twist_yaw [std_msgs/Float32]
+ * /mpc_tracker/cmd_twist_x [std_msgs/Float32] : for visualization
+ * /mpc_tracker/cmd_twist_yaw [std_msgs/Float32] : : for visualization
+ * /mpc_tracker/predictive_pose [visualization_msgs/MarkerArray] : for visualization
+ * /mpc_tracker/robot_twist_x [std_msgs/Float32] : for visualization
+ * /mpc_tracker/robot_twist_yaw [std_msgs/Float32] : for visualization
  * /rosout [rosgraph_msgs/Log]
 
 Subscriptions: 
