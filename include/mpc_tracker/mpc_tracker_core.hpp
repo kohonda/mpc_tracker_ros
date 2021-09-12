@@ -2,6 +2,7 @@
 #define MPC_TRACKER_Core_H
 
 #include <memory>
+#include <mutex>
 #include <ros/ros.h>
 #include <std_msgs/Float32.h>
 #include <geometry_msgs/Twist.h>
@@ -43,6 +44,7 @@ public:
     ~MPCTracker();
 
 private:
+    std::mutex mtx_; //!< @brief variable for lock/unlock of updating class member variables
     /*ros system variables*/
     ros::NodeHandle nh_;           //!< @brief ros public node handle
     ros::NodeHandle private_nh_;   //!< @brief ros private node handle
@@ -63,7 +65,7 @@ private:
     int curvature_smoothing_num_;       //!< @brief Smoothing value for curvature calculation
     double max_curvature_change_rate_;  //!< @brief Saturate value for curvature change rate [1/m^2]
     double speed_reduction_rate_;       //!< @brief Reduce the speed reference based on the rate of curvature change; v_ref' = v_ref * exp (-speed_reduction_rate * curvature_rate^2)
-    double deceleration_rate_for_stop_; //!< @brief Reduce the speed reference for stopping; v_ref'  = v_ref * (1 - exp(-deceleration_rate_for_stop * (x_goal -x_f))), recommend the same value as a a_min in MPC formulation
+    double deceleration_rate_for_stop_; //!< @brief Reduce the speed reference for stopping; v_ref'  = v_ref * (1 - exp(-deceleration_rate_for_stop * (x_goal -x_f))), recommend the same value as a_min in MPC formulation
 
     /*cgmres solver parameters*/
     struct CGMRESParam
@@ -106,13 +108,19 @@ private:
     std::function<double(double)> drivable_width_;   // not used now
 
     /*Flags*/
-    bool is_robot_state_ok_ = false;
-    bool initial_solution_calculate_ = false;
+    bool is_robot_state_ok_ = false;          //!< @brief Check getting robot observed info
+    bool initial_solution_calculate_ = false; //!< @brief Initialize C/GMRES method using Newton-method
+    bool is_finish_goal_ = false;             //!< @brief Check reached the goal
+    bool is_permit_control_ = false;          //!< @brief Check control permission from higher level planner
 
     /*Visualization info*/
     ros::Publisher pub_predictive_pose_;  //! @brief MPC predictive pose publisher
     ros::Publisher pub_calculation_time_; //! @brief calculation time publisher
     ros::Publisher pub_F_norm_;           //! @brief F norm is Deviation from optimal solution
+    ros::Publisher pub_twist_x_;          //! @brief pub odom twist_x for visualization
+    ros::Publisher pub_cmd_twist_x_;      //! @brief pub command twist_x for visualization
+    ros::Publisher pub_twist_yaw_;        //! @brief pub odom twist_x for visualization
+    ros::Publisher pub_cmd_twist_yaw_;    //! @brief pub command twist_x for visualization
 
     /*Library*/
     std::unique_ptr<cgmres::ContinuationGMRES> nmpc_solver_ptr_;         //!< @brief nonlinear mpc solver pointer
@@ -124,10 +132,9 @@ private:
 
     /**
      * @brief calculate and publish control input
-     * 
+     *
      */
-    void
-    timer_callback(const ros::TimerEvent &);
+    void timer_callback(const ros::TimerEvent &);
 
     /**
      * @brief Subscribe to odometry and update pose and twist at that time. Pose is updated from tf, and twist is updated from odometry.
@@ -138,14 +145,49 @@ private:
 
     /**
      * @brief Update reference path from higher level planner and filter it.
-     * 
-     * @param [in] path 
+     *
+     * @param [in] path
      */
     void callback_reference_path(const nav_msgs::Path &path);
 
+    /**
+     * @brief Publish geometry_msgs::Twist
+     *
+     * @param twist_cmd
+     */
     void publish_twist(const Twist &twist_cmd) const;
 
-    visualization_msgs::MarkerArray convert_predictivestate2marker(const std::array<std::vector<double>, MPC_STATE_SPACE::DIM> &predictive_state, const std::string &name_space, const std::string &frame_id, const double &r, const double &g, const double &b, const double &z) const;
+    /**
+     * @brief converter form predictive state in MPC to MarkerArray for rviz
+     *
+     * @param predictive_state
+     * @param name_space
+     * @param frame_id
+     * @param r
+     * @param g
+     * @param b
+     * @param z
+     * @return visualization_msgs::MarkerArray
+     */
+    visualization_msgs::MarkerArray convert_predictivestate2marker(const std::array<std::vector<double>, MPC_STATE_SPACE::DIM> &predictive_state, const std::string &name_space,
+                                                                   const std::string &frame_id, const double &r, const double &g, const double &b, const double &z) const;
+
+       /**
+     * @brief
+     *
+     * @param control_input_vec
+     * @param control_input_series
+     * @return true : Success of Optimization
+     * @return false : Failure of Optimization
+     */
+    bool calculate_mpc(std::array<double, MPC_INPUT::DIM> *control_input, std::array<std::vector<double>, MPC_INPUT::DIM> *control_input_series, double *F_norm);
+
+    /**
+     * @brief Reset C/GMRES method when break down
+     *
+     * @param solution_initial_guess
+     */
+    void reset_cgmres(const std::array<double, MPC_INPUT::DIM> &solution_initial_guess);
 };
 
 #endif

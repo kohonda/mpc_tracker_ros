@@ -97,6 +97,10 @@ target_link_libraries(simulation
   Python3::NumPy
 )
 
+target_link_libraries(simulation
+  ${catkin_LIBRARIES}
+)
+
 install(
   TARGETS
     mpc_tracker_node

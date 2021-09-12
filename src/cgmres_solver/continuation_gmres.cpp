@@ -18,7 +18,7 @@ namespace cgmres
                                           std::function<double(double)> &traj_speed, std::function<double(double)> &drivable_width, double *control_input_vec,
                                           std::array<std::vector<double>, MPC_INPUT::DIM> *control_input_series)
     {
-        const bool is_cgmres_error = mfgmres_.solveLinearProblem(continuation_problem_, time, state_vec, solution_vec_, traj_curvature, traj_speed, drivable_width, solution_update_vec_);
+        const bool is_mpc_solved = mfgmres_.solveLinearProblem(continuation_problem_, time, state_vec, solution_vec_, traj_curvature, traj_speed, drivable_width, solution_update_vec_);
         continuation_problem_.integrateSolution(solution_vec_, solution_update_vec_, sampling_period);
         for (int i = 0; i < dim_control_input_; ++i)
         {
@@ -31,7 +31,7 @@ namespace cgmres
             control_input_series->at(MPC_INPUT::ACCEL).push_back(solution_vec_[dim_control_input_ * i + 1]);
         }
 
-        return is_cgmres_error;
+        return is_mpc_solved;
     }
 
     void ContinuationGMRES::setParametersForInitialization(const double *initial_guess_solution, const double newton_residual_tolerance, const int max_newton_iteration)

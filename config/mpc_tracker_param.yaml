@@ -7,31 +7,31 @@ map_frame_id: map
 
 # -- control parameters --
 control_sampling_time: 0.1 # [s] control interval
-reference_speed: 1.0 # [m/s]
+reference_speed: 0.5 # [m/s]
 
 # -- Prediction path smoothing parameters --
-curvature_smoothing_num: 10 # Smoothing value for curvature calculation
+curvature_smoothing_num: 1.0 # Smoothing value for curvature calculation
 max_curvature_change_rate: 1.0 # Saturate value for curvature change rate [1/m^2]
-speed_reduction_rate: 0.1 # Reduce the speed reference based on the rate of curvature change; v_ref' = v_ref * exp (-speed_reduction_rate * curvature_rate^2)
-deceleration_rate_for_stop: 0.3 # Reduce the speed reference for stopping; v_ref'  = v_ref * (1 - exp(-deceleration_rate_for_stop * (x_goal -x_f))), recommend the same value as a a_min in MPC formulation
+speed_reduction_rate: 0.5 # Reduce the speed reference based on the rate of curvature change; v_ref' = v_ref * exp (-speed_reduction_rate * curvature_rate^2)
+deceleration_rate_for_stop: 0.5 # Reduce the speed reference for stopping; v_ref'  = v_ref * (1 - exp(-deceleration_rate_for_stop * (x_goal -x_f))), recommend the same value as a a_min in MPC formulation
 
 # -- C/GMRES solver parameters --
-Tf: 1.0 # Length of predictive horizon in C/GMRES [s]
+Tf: 1.5 # Length of predictive horizon in C/GMRES [s]
 alpha: 0.5 # The length horizon at time t is given by T_f * (1-exp(-alpha*t))
-N: 10 # The number of discrete of the predictive horizon
+N: 15 # The number of discrete of the predictive horizon
 finite_distance_increment: 0.0002 # Step length of the finite difference in C/GMRES method
-zeta: 62.5 # A parameter for stabilization of the C/GMRES method
-kmax: 5 # dimension of the Krylov subspace and maximum iteration number
+zeta: 10 # A parameter for stabilization of the C/GMRES method, it should be 1/control_sampling_time
+kmax: 100 # dimension of the Krylov subspace and maximum iteration number
 
 # -- MPC parameters --
 weight_lat_error: 0.1 # Weight for lateral error from reference path in stage cost
-weight_yaw_error: 0.1 # Weight for yaw error from reference path in stage cost
-weight_twist_x_error: 0.1 # Weight for twist_x error from reference path in stage cost
+weight_yaw_error: 0.0 # Weight for yaw error from reference path in stage cost
+weight_twist_x_error: 0.5 # Weight for twist_x error from reference path in stage cost
 terminal_weight_lat_error: 0.1 # Weight for lateral error from reference path in terminal cost
-terminal_weight_yaw_error: 0.1 # Weight for yaw error from reference path in terminal cost
-terminal_weight_twist_x_error: 0.1 # Weight for twist_x error from reference path in terminal cost
+terminal_weight_yaw_error: 0.0 # Weight for yaw error from reference path in terminal cost
+terminal_weight_twist_x_error: 0.5 # Weight for twist_x error from reference path in terminal cost
 weight_input_angular_yaw: 0.01 # Weight for angular velocity input
-weight_input_accel: 0.01 # Weight for acceleration input
-barrier_coefficient: 0.1 # barrier function coefficient for inequality constraint
-maximum_acceleration: 0.2 # Maximum acceleration
-minimum_deceleration: -0.2 # Minimum deceleration
+weight_input_accel: 0.5 # Weight for acceleration input
+barrier_coefficient: 0.0 # barrier function coefficient for inequality constraint
+maximum_acceleration: 0.5 # Maximum acceleration
+minimum_deceleration: -0.5 # Minimum deceleration

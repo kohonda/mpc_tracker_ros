@@ -8,10 +8,12 @@
 #include <Eigen/Dense>
 #include <unordered_map>
 #include <nav_msgs/Path.h>
+#include <ros/ros.h>
 #include <tf2/utils.h>
 #include "rapidcsv.h"
 #include "MPCCourse.hpp"
 #include "Pose.hpp"
+#include "CSVWriter.hpp"
 
 namespace pathtrack_tools
 {
@@ -45,6 +47,12 @@ namespace pathtrack_tools
       int get_path_size() const;
 
       /**
+     * @brief clear reference path
+     *
+     */
+      void clear_path();
+
+      /**
      * @brief Get the mpc cource object for test
      *
      * @return MPCCourse
@@ -59,10 +67,10 @@ namespace pathtrack_tools
       void set_course_from_csv(const std::string &csv_path);
 
       /**
-       * @brief Set the course from nav msgs path
-       * 
-       * @param path 
-       */
+     * @brief Set the course from nav msgs path
+     *
+     * @param path
+     */
       void set_course_from_nav_msgs(const nav_msgs::Path &path, const double &reference_speed);
 
       /**
@@ -89,13 +97,16 @@ namespace pathtrack_tools
      */
       double get_drivable_width(const double &pose_x_f);
 
+      void output_mpc_course(const std::string &output_csv_path) const;
+
    private:
       MPCCourse mpc_course_; //!< @brief driving course interface using in MPC
       // Parameters for path smoothing and filtering
-      const int curvature_smoothing_num_ = 10;        //!< @brief Smoothing value for curvature calculation
-      const double max_curvature_change_rate_ = 1.0;  //!< @brief Saturate value for curvature change rate [1/m^2]
-      const double speed_reduction_rate_ = 0.1;       //!< @brief Reduce the speed reference based on the rate of curvature change; v_ref' = v_ref * exp (-speed_reduction_rate * curvature_rate^2)
-      const double deceleration_rate_for_stop_ = 0.3; //!< @brief Reduce the speed reference for stopping; v_ref'  = v_ref * (1 - exp(-deceleration_rate_for_stop * (x_goal -x_f))), recommend the same value as a a_min in MPC formulation
+      const int curvature_smoothing_num_ = 10;       //!< @brief Smoothing value for curvature calculation
+      const double max_curvature_change_rate_ = 1.0; //!< @brief Saturate value for curvature change rate [1/m^2]
+      const double speed_reduction_rate_ = 0.1;      //!< @brief Reduce the speed reference based on the rate of curvature change; v_ref' = v_ref * exp (-speed_reduction_rate * curvature_rate^2)
+      const double deceleration_rate_for_stop_ =
+          0.3; //!< @brief Reduce the speed reference for stopping; v_ref'  = v_ref * (1 - exp(-deceleration_rate_for_stop * (x_goal -x_f))), recommend the same value as a a_min in MPC formulation
 
       // Parameters for lookup table (xf) -> (nearest index)
       std::unordered_map<double, int> hash_xf2index_; // Hash that connects x_f to the nearest index

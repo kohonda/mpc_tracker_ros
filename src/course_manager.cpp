@@ -2,7 +2,6 @@
 
 namespace pathtrack_tools
 {
-
     CourseManager::CourseManager()
     {
         nearest_index_ = 0;
@@ -31,6 +30,11 @@ namespace pathtrack_tools
     int CourseManager::get_path_size() const
     {
         return mpc_course_.size();
+    }
+
+    void CourseManager::clear_path()
+    {
+        mpc_course_.clear();
     }
 
     MPCCourse CourseManager::get_mpc_course() const
@@ -74,6 +78,13 @@ namespace pathtrack_tools
         mpc_course_.speed = reference_speed;
         mpc_course_.drivable_width = drivable_delta_y_f;
 
+        /*Set zero reference speed at final reference point*/
+        const size_t zero_speed_point_num = 1;
+        for (size_t i = 0; i < zero_speed_point_num; i++)
+        {
+            mpc_course_.speed.at(mpc_course_.size() - i - 1) = 0.0;
+        }
+
         // set accumulated path length, which is nearly equal to x_f
         // offset = 0.0, which must be set previous xf when mpc_course is given sequentially.
         set_accumulated_path_length(0.0, &mpc_course_);
@@ -110,7 +121,6 @@ namespace pathtrack_tools
 
         // set accumulated path length, which is nearly equal to x_f
         // offset = 0.0, which must be set previous xf when mpc_course is given sequentially.
-        // TODO: ここをどうするか．
         set_accumulated_path_length(0.0, &mpc_course_);
 
         // set curvature, which is nearly equal to x_f
@@ -134,7 +144,7 @@ namespace pathtrack_tools
     {
         if (mpc_course->size() == 0)
         {
-            std::cerr << "[Warning] Reference Course size is zero!" << std::endl;
+            ROS_WARN("[MPC] Reference path size is zero!");
         }
 
         mpc_course->accumulated_path_length = calc_accumulated_path_length(offset, *mpc_course);
@@ -165,7 +175,7 @@ namespace pathtrack_tools
     {
         if (mpc_course->size() == 0)
         {
-            std::cerr << "[Warning] Reference Course size is zero!" << std::endl;
+            ROS_WARN("[MPC] Reference path size is zero!");
         }
         mpc_course->curvature = calc_path_curvature(smoothing_num, *mpc_course);
     }
@@ -263,7 +273,7 @@ namespace pathtrack_tools
         }
         if (is_filtered)
         {
-            std::cout << "Filtered mpc_course curvature because path curvature change rate is too big." << std::endl;
+            ROS_INFO_STREAM_ONCE("[MPC] Filtered reference path curvature because path curvature change rate is too big.");
         }
     }
 
@@ -342,6 +352,37 @@ namespace pathtrack_tools
         return drivable_width_interpolated;
     }
 
+    void CourseManager::output_mpc_course(const std::string &output_csv_path) const
+    {
+        CSVWriter csv;
+        /* clang-format off */
+    csv.newRow() << "x"
+                 << "y"
+                 << "z"
+                 << "yaw"
+                 << "speed"
+                 << "curvature"
+                 << "accumulated_path_length"
+                 << "drivable_width";
+        /* clang-format on */
+        csv.writeToFile(output_csv_path);
+
+        for (int i = 0; i < mpc_course_.size(); i++)
+        {
+            /* clang-format off */
+        csv.newRow() << mpc_course_.x.at(i)
+                     << mpc_course_.y.at(i)
+                     << mpc_course_.z.at(i)
+                     << mpc_course_.yaw.at(i)
+                     << mpc_course_.speed.at(i)
+                     << mpc_course_.curvature.at(i)
+                     << mpc_course_.accumulated_path_length.at(i)
+                     << mpc_course_.drivable_width.at(i);
+            /* clang-format on */
+            csv.writeToFile(output_csv_path);
+        }
+    }
+
     int CourseManager::search_nearest_index(const MPCCourse &mpc_course, const double &pose_x_f, const int &last_nearest_index) const noexcept
     {
         // NOTE : Not consider z and yaw
@@ -384,7 +425,7 @@ namespace pathtrack_tools
     {
         if (mpc_course.size() == 0)
         {
-            std::cerr << "[Warning] Reference Cource size is zero!" << std::endl;
+            ROS_WARN("[MPC] Reference path size is zero!");
             return -1;
         }
 
@@ -419,7 +460,7 @@ namespace pathtrack_tools
         }
         catch (const std::out_of_range &ex)
         {
-            std::cerr << "[Warning] Out of range of Reference cource. Plsease set longer mpc_course. " << std::endl;
+            ROS_WARN_STREAM_THROTTLE(1.0, "[MPC] Out of range of Reference course. Plsease set longer mpc_course.");
             nearest_index = mpc_course_.size() - 1;
         }
 

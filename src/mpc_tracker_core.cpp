@@ -73,6 +73,10 @@ MPCTracker::MPCTracker() : nh_(""), private_nh_("~"), tf_listener_(tf_buffer_), 
     pub_predictive_pose_ = private_nh_.advertise<visualization_msgs::MarkerArray>("predictive_pose", 1);
     pub_calculation_time_ = private_nh_.advertise<std_msgs::Float32>("calculation_time", 1);
     pub_F_norm_ = private_nh_.advertise<std_msgs::Float32>("F_norm", 1);
+    pub_twist_x_ = private_nh_.advertise<std_msgs::Float32>("robot_twist_x", 1);
+    pub_cmd_twist_x_ = private_nh_.advertise<std_msgs::Float32>("cmd_twist_x", 1);
+    pub_twist_yaw_ = private_nh_.advertise<std_msgs::Float32>("robot_twist_yaw", 1);
+    pub_cmd_twist_yaw_ = private_nh_.advertise<std_msgs::Float32>("cmd_twist_yaw", 1);
 };
 
 MPCTracker::~MPCTracker()
@@ -84,73 +88,60 @@ MPCTracker::~MPCTracker()
 
 void MPCTracker::timer_callback([[maybe_unused]] const ros::TimerEvent &te)
 {
-    stop_watch_.lap();
 
-    /*status check*/
+    /*Guard robot and reference path status*/
     const int path_size = course_manager_ptr_->get_path_size();
     if (path_size == 0 || !is_robot_state_ok_)
     {
-        ROS_INFO("[MPC] MPC is not solved. ref_path_size: %d, is_pose_set: %d", path_size, is_robot_state_ok_);
+        ROS_INFO_STREAM("[MPC] MPC is not solved. ref_path_size:" << path_size << ", is_pose_set: " << is_robot_state_ok_);
         publish_twist(prev_twist_cmd_);
+
         return;
     }
 
-    /*coordinate convert from euclid to frenet-serret*/
-    robot_status_.robot_pose_frenet_ = frenet_serret_converter_.global2frenet(course_manager_ptr_->get_mpc_course(), robot_status_.robot_pose_global_);
+    stop_watch_.lap();
 
-    /*Set state vector*/
-    const std::vector<double> state_vec{robot_status_.robot_pose_frenet_.x_f, robot_status_.robot_pose_frenet_.y_f, robot_status_.robot_pose_frenet_.yaw_f};
+    mtx_.lock();
 
-    /*Control input*/
-    double control_input_vec[MPC_INPUT::DIM] = {0.0};
-
-    /*Control input series for visualization */
-    std::array<std::vector<double>, MPC_INPUT::DIM> control_input_series;
-
-    /*Solve NMPC by C/GMRES method*/
-    const double current_time = ros::Time::now().toSec(); // Used when first increasing the prediction horizon.
-    if (!initial_solution_calculate_)
-    {
-        // The initial solution is calculated using Newton-GMRES method
-        nmpc_solver_ptr_->initializeSolution(current_time, state_vec, path_curvature_, trajectory_speed_, drivable_width_);
-        nmpc_solver_ptr_->getControlInput(control_input_vec);
-    }
-    else
-    {
-        // Update control_input_vec by C/GMRES method
-        const bool mpc_solver_error = nmpc_solver_ptr_->controlUpdate(current_time, state_vec, control_sampling_time_, path_curvature_, trajectory_speed_, drivable_width_, control_input_vec, &control_input_series);
-        if (mpc_solver_error)
-        {
-            ROS_ERROR("[MPC] Break down C/GMRES method.");
-            publish_twist(prev_twist_cmd_);
-            return;
-        }
-    }
+    std::array<double, MPC_INPUT::DIM> control_input{0.0, 0.0};             // updated variables by mpc
+    std::array<std::vector<double>, MPC_INPUT::DIM> control_input_series{}; // for visualization
+    double F_norm = 0.0;                                                    // F_norm
+    bool is_mpc_solved = calculate_mpc(&control_input, &control_input_series, &F_norm);
 
     const double calculation_time = stop_watch_.lap();
+    ROS_DEBUG_STREAM("[MPC] calculation time: " << calculation_time);
 
-    /*NAN Guard*/
-    if (std::isnan(control_input_vec[MPC_INPUT::ACCEL]) || std::isnan(control_input_vec[MPC_INPUT::ANGULAR_VEL_YAW]))
+    if (!is_mpc_solved)
     {
-        ROS_ERROR("[MPC] Calculate NAN control input");
-        publish_twist(prev_twist_cmd_);
+        ROS_ERROR("[MPC] Break down C/GMRES method.");
+        Twist stop_twist(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        // publish_twist(prev_twist_cmd_);
+        publish_twist(stop_twist);
+
+        // reset_cgmres({ prev_twist_cmd_.yaw, prev_twist_cmd_.x });
+        reset_cgmres({0.0, 0.0});
+
+        mtx_.unlock();
         return;
     }
 
     /*Publish twist cmd*/
     Twist twist_cmd;
-    twist_cmd.x = robot_status_.robot_twist_.x + control_input_vec[MPC_INPUT::ACCEL] * control_sampling_time_;
+    twist_cmd.x = robot_status_.robot_twist_.x + control_input[MPC_INPUT::ACCEL] * control_sampling_time_;
     twist_cmd.y = 0.0;
     twist_cmd.z = 0.0;
     twist_cmd.roll = 0.0;
     twist_cmd.pitch = 0.0;
-    twist_cmd.yaw = control_input_vec[MPC_INPUT::ANGULAR_VEL_YAW];
+    twist_cmd.yaw = control_input[MPC_INPUT::ANGULAR_VEL_YAW];
     publish_twist(twist_cmd);
 
     prev_twist_cmd_ = twist_cmd;
 
+    mtx_.unlock();
+
     /*Visualization*/
-    const std::array<std::vector<double>, MPC_STATE_SPACE::DIM> predictive_poses = mpc_simulator_ptr_->reproduct_predivted_state(robot_status_.robot_pose_global_, robot_status_.robot_twist_, control_input_series, control_sampling_time_);
+    const std::array<std::vector<double>, MPC_STATE_SPACE::DIM> predictive_poses =
+        mpc_simulator_ptr_->reproduct_predivted_state(robot_status_.robot_pose_global_, robot_status_.robot_twist_, control_input_series, control_sampling_time_);
     const visualization_msgs::MarkerArray markers = convert_predictivestate2marker(predictive_poses, "mpc_predictive_pose", map_frame_id_, 0.99, 0.99, 0.99, 0.2);
     pub_predictive_pose_.publish(markers);
 
@@ -159,7 +150,6 @@ void MPCTracker::timer_callback([[maybe_unused]] const ros::TimerEvent &te)
     pub_calculation_time_.publish(calculation_time_msg);
 
     std_msgs::Float32 F_norm_msg;
-    const double F_norm = nmpc_solver_ptr_->getErrorNorm(current_time, state_vec, path_curvature_, trajectory_speed_, drivable_width_);
     F_norm_msg.data = static_cast<float>(F_norm);
     pub_F_norm_.publish(F_norm_msg);
 };
@@ -183,54 +173,74 @@ void MPCTracker::callback_odom(const nav_msgs::Odometry &odom)
     robot_status_.robot_pose_global_.x = trans_form_stamped.transform.translation.x;
     robot_status_.robot_pose_global_.y = trans_form_stamped.transform.translation.y;
     robot_status_.robot_pose_global_.z = trans_form_stamped.transform.translation.z; // not used now
-    double roll, pitch, yaw;
-    tf2::getEulerYPR(trans_form_stamped.transform.rotation, roll, pitch, yaw);
-    robot_status_.robot_pose_global_.roll = roll;   // not used now
-    robot_status_.robot_pose_global_.pitch = pitch; // not used now
-    robot_status_.robot_pose_global_.yaw = yaw;
+    robot_status_.robot_pose_global_.roll = 0.0;                                     // not used now
+    robot_status_.robot_pose_global_.pitch = 0.0;                                    // not used now
+    robot_status_.robot_pose_global_.yaw = tf2::getYaw(trans_form_stamped.transform.rotation);
 
     /*update robot twist*/
     robot_status_.robot_twist_.x = odom.twist.twist.linear.x;
     robot_status_.robot_twist_.y = odom.twist.twist.linear.y;
-    robot_status_.robot_twist_.z = odom.twist.twist.linear.z;     // not used now
-    robot_status_.robot_twist_.roll = odom.twist.twist.angular.x; // not used now
-    robot_status_.robot_twist_.pitch = odom.twist.twist.linear.y; // note used now
+    robot_status_.robot_twist_.z = odom.twist.twist.linear.z;      // not used now
+    robot_status_.robot_twist_.roll = odom.twist.twist.angular.x;  // not used now
+    robot_status_.robot_twist_.pitch = odom.twist.twist.angular.y; // note used now
     robot_status_.robot_twist_.yaw = odom.twist.twist.angular.z;
 
     /*check first msg*/
     is_robot_state_ok_ = true;
+
+    /*publish for visualize*/
+    std_msgs::Float32 twist_x_msg, twist_yaw_msg;
+    twist_x_msg.data = static_cast<float>(robot_status_.robot_twist_.x);
+    twist_yaw_msg.data = static_cast<float>(robot_status_.robot_twist_.yaw);
+    pub_twist_x_.publish(twist_x_msg);
+    pub_twist_yaw_.publish(twist_yaw_msg);
 };
 
 // update reference_course in MPC and calculate curvature
 void MPCTracker::callback_reference_path(const nav_msgs::Path &path)
 {
+
     if (path.poses.size() == 0)
     {
         ROS_WARN("Received reference path is empty");
+        course_manager_ptr_->clear_path();
         return;
     }
 
     /*Set reference course, calculate path curvature and filtering path used in MPC*/
     // TODO::NOTE: NOW SET REFERENCE SPEED IS CONSTANT
-    // TODO : リサンプリングがひつようかも
     course_manager_ptr_->set_course_from_nav_msgs(path, reference_speed_);
 
-    ROS_INFO("[MPC] Path callback: receive path size = %d", course_manager_ptr_->get_mpc_course().size());
+    ROS_DEBUG("[MPC] Path callback: receive path size = %d", course_manager_ptr_->get_mpc_course().size());
+
+    /*Save reference path*/
+    // const std::string output_csv_path = "/home/honda/Desktop/output_reference_path.csv";
+    // course_manager_ptr_->output_mpc_course(output_csv_path);
 };
 
 void MPCTracker::publish_twist(const Twist &twist_cmd) const
 {
+    // TODO: twist filter: max ~ min
+
     geometry_msgs::Twist twist;
     twist.linear.x = twist_cmd.x;
     twist.linear.y = 0.0;
     twist.linear.z = 0.0;
     twist.angular.x = 0.0;
     twist.angular.y = 0.0;
-    twist.angular.z = twist_cmd.roll;
+    twist.angular.z = twist_cmd.yaw;
     pub_twist_cmd_.publish(twist);
+
+    /*publish for visualize*/
+    std_msgs::Float32 twist_cmd_x_msg, twist_cmd_yaw_msg;
+    twist_cmd_x_msg.data = static_cast<float>(twist_cmd.x);
+    twist_cmd_yaw_msg.data = static_cast<float>(twist_cmd.yaw);
+    pub_cmd_twist_x_.publish(twist_cmd_x_msg);
+    pub_cmd_twist_yaw_.publish(twist_cmd_yaw_msg);
 };
 
-visualization_msgs::MarkerArray MPCTracker::convert_predictivestate2marker(const std::array<std::vector<double>, MPC_STATE_SPACE::DIM> &predictive_state, const std::string &name_space, const std::string &frame_id, const double &r, const double &g, const double &b, const double &z) const
+visualization_msgs::MarkerArray MPCTracker::convert_predictivestate2marker(const std::array<std::vector<double>, MPC_STATE_SPACE::DIM> &predictive_state, const std::string &name_space,
+                                                                           const std::string &frame_id, const double &r, const double &g, const double &b, const double &z) const
 {
     visualization_msgs::MarkerArray marker_array;
 
@@ -256,6 +266,7 @@ visualization_msgs::MarkerArray MPCTracker::convert_predictivestate2marker(const
         p.z = z;
         marker.points.push_back(p);
     }
+    marker_array.markers.push_back(marker);
 
     /*Add pose as arrow*/
     visualization_msgs::Marker marker_poses;
@@ -286,4 +297,66 @@ visualization_msgs::MarkerArray MPCTracker::convert_predictivestate2marker(const
     }
 
     return marker_array;
+}
+
+bool MPCTracker::calculate_mpc(std::array<double, MPC_INPUT::DIM> *control_input, std::array<std::vector<double>, MPC_INPUT::DIM> *control_input_series, double *F_norm)
+{
+    /*coordinate convert from euclid to frenet-serret*/
+    robot_status_.robot_pose_frenet_ = frenet_serret_converter_.global2frenet(course_manager_ptr_->get_mpc_course(), robot_status_.robot_pose_global_);
+
+    /*Set state vector*/
+    std::vector<double> state_vec(MPC_STATE_SPACE::DIM);
+    state_vec[MPC_STATE_SPACE::X_F] = robot_status_.robot_pose_frenet_.x_f;
+    state_vec[MPC_STATE_SPACE::Y_F] = robot_status_.robot_pose_frenet_.y_f;
+    state_vec[MPC_STATE_SPACE::YAW_F] = robot_status_.robot_pose_frenet_.yaw_f;
+    state_vec[MPC_STATE_SPACE::TWIST_X] = robot_status_.robot_twist_.x;
+
+    /*Control input*/
+    double control_input_vec[MPC_INPUT::DIM] = {0.0, 0.0};
+
+    bool is_mpc_solved = true;
+    /*Solve NMPC by C/GMRES method*/
+    const double current_time = ros::Time::now().toSec(); // Used when first increasing the prediction horizon.
+    if (!initial_solution_calculate_)
+    {
+        // The initial solution is calculated using Newton-GMRES method
+        nmpc_solver_ptr_->initializeSolution(current_time, state_vec, path_curvature_, trajectory_speed_, drivable_width_);
+        nmpc_solver_ptr_->getControlInput(control_input_vec);
+        initial_solution_calculate_ = true;
+    }
+    else
+    {
+        // Update control_input_vec by C / GMRES method
+        is_mpc_solved = nmpc_solver_ptr_->controlUpdate(current_time, state_vec, control_sampling_time_, path_curvature_, trajectory_speed_, drivable_width_, control_input_vec, control_input_series);
+
+        // Update control input
+        control_input->at(MPC_INPUT::ANGULAR_VEL_YAW) = control_input_vec[MPC_INPUT::ANGULAR_VEL_YAW];
+        control_input->at(MPC_INPUT::ACCEL) = control_input_vec[MPC_INPUT::ACCEL];
+
+        // Update F_norm
+        *F_norm = nmpc_solver_ptr_->getErrorNorm(current_time, state_vec, path_curvature_, trajectory_speed_, drivable_width_);
+    }
+
+    /*NAN Guard*/
+    if (std::isnan(control_input->at(MPC_INPUT::ANGULAR_VEL_YAW)) || std::isnan(control_input->at(MPC_INPUT::ACCEL)))
+    {
+        ROS_ERROR("[MPC] Calculate NAN control input");
+        is_mpc_solved = false;
+    }
+
+    return is_mpc_solved;
+}
+
+void MPCTracker::reset_cgmres(const std::array<double, MPC_INPUT::DIM> &solution_initial_guess)
+{
+    ROS_WARN("[MPC] Reset C/GMRES solver");
+    nmpc_solver_ptr_.reset();
+    nmpc_solver_ptr_ =
+        std::make_unique<cgmres::ContinuationGMRES>(cgmres_param_.Tf_, cgmres_param_.alpha_, cgmres_param_.N_, cgmres_param_.finite_distance_increment_, cgmres_param_.zeta_, cgmres_param_.kmax_);
+
+    const double initial_guess[MPC_INPUT::DIM] = {solution_initial_guess[MPC_INPUT::ANGULAR_VEL_YAW], solution_initial_guess[MPC_INPUT::ACCEL]};
+    nmpc_solver_ptr_->setParametersForInitialization(initial_guess, 1e-06, 50);
+    nmpc_solver_ptr_->continuation_problem_.ocp_.model_.set_parameters(mpc_param_.q_, mpc_param_.q_terminal_, mpc_param_.r_, mpc_param_.barrier_coefficient_, mpc_param_.a_max_, mpc_param_.a_min_);
+
+    initial_solution_calculate_ = false;
 }
