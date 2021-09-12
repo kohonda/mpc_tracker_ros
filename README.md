@@ -98,8 +98,8 @@ Publications:
  * /rosout [rosgraph_msgs/Log]
 
 Subscriptions: 
- * /odom [nav_msgs/Odometry]
- * /reference_path [nav_msgs/Path]
- * /tf [tf2_msgs/TFMessage]
+ * /odom [nav_msgs/Odometry] : observed Twist of the robot
+ * /reference_path [nav_msgs/Path] : reference path in map coordinate
+ * /tf [tf2_msgs/TFMessage] : observed Pose of the robot in map coordinate
 ```
 
