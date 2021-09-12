@@ -25,7 +25,7 @@
 /**
  * @class reference trajectory tracker class
  * @brief calculate control input based nonlinear MPC using C/GMRES method
- * @author Kohei Honda
+ * @author Kohei Honda <0905honda@gmail.com>
  * @date Aug.2021
  */
 class MPCTracker {
