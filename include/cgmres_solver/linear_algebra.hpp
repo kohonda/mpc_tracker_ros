@@ -1,11 +1,9 @@
 #ifndef LINEAR_ALGEBRA_H
 #define LINEAR_ALGEBRA_H
 #include <vector>
-namespace cgmres
-{
+namespace cgmres {
 // Functions supporting linear algebra.
-namespace linearalgebra
-{
+namespace linearalgebra {
 // Allocates memory for a vector whose dimension is dim and set all components
 // zero. Then returns the pointer to the vector.
 double* NewVector(const int dim);

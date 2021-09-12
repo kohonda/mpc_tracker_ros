@@ -82,8 +82,24 @@ source install/setup.bash
 
 roslaunch mpc_tracker mpc_tracker.launch
 ```
+#### I/O
 
+```bash
+Node [/mpc_tracker]
+Publications: 
+ * /twist_cmd [geometry_msgs/Twist]
+ * /mpc_tracker/F_norm [std_msgs/Float32]
+ * /mpc_tracker/calculation_time [std_msgs/Float32]
+ * /mpc_tracker/cmd_twist_x [std_msgs/Float32]
+ * /mpc_tracker/cmd_twist_yaw [std_msgs/Float32]
+ * /mpc_tracker/predictive_pose [visualization_msgs/MarkerArray]
+ * /mpc_tracker/robot_twist_x [std_msgs/Float32]
+ * /mpc_tracker/robot_twist_yaw [std_msgs/Float32]
+ * /rosout [rosgraph_msgs/Log]
 
-## Configuration and Parameters
+Subscriptions: 
+ * /odom [nav_msgs/Odometry]
+ * /reference_path [nav_msgs/Path]
+ * /tf [tf2_msgs/TFMessage]
+```
 
-TODO
