@@ -98,7 +98,7 @@ int main(int argc, char *argv[]) {
   StopWatch stop_watch;
 
   const double start_time = 0.0;
-  const double end_time = 100.0;
+  const double end_time = 120.0;
 
   std::cout << "Start Simulation" << std::endl;
   for (double current_time = start_time; current_time < end_time; current_time += sampling_time) {
